@@ -33,6 +33,7 @@ class Tetris:
         self.job = None
         self.new_game()
 
+    # ---------- состояние игры ----------
     def new_game(self):
         if self.job:
             self.root.after_cancel(self.job)
@@ -54,11 +55,17 @@ class Tetris:
         if not self.fits(self.cells, self.x, self.y):
             self.over = True
 
-    def fits(self, cells, x, y):
-        for dx, dy in cells:
-            nx, ny = x + dx, y + dy
-            if nx < 0 or nx >= W or ny >= H:
-                return False
-            if ny >= 0 and self.board[ny][nx]:
-                return False
-        return True
+    # ---------- цикл игры ----------
+    def tick(self):
+        if not self.over and not self.paused:
+            if not self.move(0, 1):
+                self.lock()
+        self.draw()
+        delay = max(80, 600 - (self.level - 1) * 50)
+        self.job = self.root.after(delay, self.tick)
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    Tetris(root)
+    root.mainloop()
