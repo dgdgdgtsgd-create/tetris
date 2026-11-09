@@ -3,6 +3,23 @@ import tkinter as tk
 
 W, H, S = 10, 20, 30  # ширина, высота стакана (в клетках) и размер клетки (в пикселях)
 
+SHAPES = {
+    "I": [(-1, 0), (0, 0), (1, 0), (2, 0)],
+    "O": [(0, 0), (1, 0), (0, 1), (1, 1)],
+    "T": [(-1, 0), (0, 0), (1, 0), (0, 1)],
+    "S": [(0, 0), (1, 0), (-1, 1), (0, 1)],
+    "Z": [(-1, 0), (0, 0), (0, 1), (1, 1)],
+    "J": [(-1, 0), (0, 0), (1, 0), (-1, 1)],
+    "L": [(-1, 0), (0, 0), (1, 0), (1, 1)],
+}
+
+COLORS = {
+    "I": "#3ec1d3", "O": "#f2c94c", "T": "#a66cff", "S": "#4cc38a",
+    "Z": "#ef5b5b", "J": "#4f7cff", "L": "#ff7a3d",
+}
+
+LINE_POINTS = [0, 100, 300, 500, 800]
+
 
 class Tetris:
     def __init__(self, root):
@@ -27,20 +44,3 @@ class Tetris:
         self.over = False
         self.paused = False
         self.next_name = random.choice(list(SHAPES))
-        self.spawn()
-        self.tick()
-
-    # ---------- цикл игры ----------
-    def tick(self):
-        if not self.over and not self.paused:
-            if not self.move(0, 1):
-                self.lock()
-        self.draw()
-        delay = max(80, 600 - (self.level - 1) * 50)
-        self.job = self.root.after(delay, self.tick)
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    Tetris(root)
-    root.mainloop()
