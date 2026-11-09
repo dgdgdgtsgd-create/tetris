@@ -1,28 +1,10 @@
-def on_key(self, event):
-        key = event.keysym
-        low = key.lower()  # "r"/"p" и русские "к"/"з" на той же клавише
-        if low in ("r", "cyrillic_ka"):
-            self.new_game()
-            return
-        if low in ("p", "cyrillic_ze") and not self.over:
-            self.paused = not self.paused
-        if self.over or self.paused:
-            self.draw()
-            return
-        if key == "Left":
-            self.move(-1, 0)
-        elif key == "Right":
-            self.move(1, 0)
-        elif key == "Down":
-            if self.move(0, 1):
-                self.score += 1
-        elif key == "Up":
-            self.rotate()
-        elif key == "space":
-            self.hard_drop()
-        self.draw()
+# модуль деңгейі (класстан тыс)
+COLORS = {
+    "I": "#3ec1d3", "O": "#f2c94c", "T": "#a66cff", "S": "#4cc38a",
+    "Z": "#ef5b5b", "J": "#4f7cff", "L": "#ff7a3d",
+}
 
-    # ---------- рисование ----------
+# класс ішіндегі әдістер
     def cell(self, x, y, name, ox=0, oy=0):
         self.canvas.create_rectangle(
             ox + x * S + 1, oy + y * S + 1,
