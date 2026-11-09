@@ -1,10 +1,4 @@
-# модуль деңгейі (класстан тыс)
-COLORS = {
-    "I": "#3ec1d3", "O": "#f2c94c", "T": "#a66cff", "S": "#4cc38a",
-    "Z": "#ef5b5b", "J": "#4f7cff", "L": "#ff7a3d",
-}
-
-# класс ішіндегі әдістер
+# ---------- рисование ----------
     def cell(self, x, y, name, ox=0, oy=0):
         self.canvas.create_rectangle(
             ox + x * S + 1, oy + y * S + 1,
@@ -43,3 +37,9 @@ COLORS = {
         elif self.paused:
             c.create_text(W * S // 2, H * S // 2, text="Пауза",
                           fill="#f2c94c", font=("Arial", 26, "bold"))
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    Tetris(root)
+    root.mainloop()
