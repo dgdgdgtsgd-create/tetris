@@ -1,4 +1,13 @@
-def move(self, dx, dy):
+def fits(self, cells, x, y):
+        for dx, dy in cells:
+            nx, ny = x + dx, y + dy
+            if nx < 0 or nx >= W or ny >= H:
+                return False
+            if ny >= 0 and self.board[ny][nx]:
+                return False
+        return True
+
+    def move(self, dx, dy):
         if self.fits(self.cells, self.x + dx, self.y + dy):
             self.x += dx
             self.y += dy
@@ -14,56 +23,3 @@ def move(self, dx, dy):
                 self.cells = new
                 self.x += kick
                 return
-
-    def lock(self):
-        for dx, dy in self.cells:
-            if self.y + dy >= 0:
-                self.board[self.y + dy][self.x + dx] = self.name
-        self.clear_lines()
-        self.spawn()
-
-    def clear_lines(self):
-        kept = [row for row in self.board if not all(row)]
-        cleared = H - len(kept)
-        self.board = [[None] * W for _ in range(cleared)] + kept
-        if cleared:
-            self.score += LINE_POINTS[cleared] * self.level
-            self.lines += cleared
-            self.level = self.lines // 10 + 1
-
-    def hard_drop(self):
-        while self.move(0, 1):
-            self.score += 2
-        self.lock()
-
-    def tick(self):
-        if not self.over and not self.paused:
-            if not self.move(0, 1):
-                self.lock()
-        self.draw()
-        delay = max(80, 600 - (self.level - 1) * 50)
-        self.job = self.root.after(delay, self.tick)
-
-    def on_key(self, event):
-        key = event.keysym
-        low = key.lower()  # "r"/"p" и русские "к"/"з" на той же клавише
-        if low in ("r", "cyrillic_ka"):
-            self.new_game()
-            return
-        if low in ("p", "cyrillic_ze") and not self.over:
-            self.paused = not self.paused
-        if self.over or self.paused:
-            self.draw()
-            return
-        if key == "Left":
-            self.move(-1, 0)
-        elif key == "Right":
-            self.move(1, 0)
-        elif key == "Down":
-            if self.move(0, 1):
-                self.score += 1
-        elif key == "Up":
-            self.rotate()
-        elif key == "space":
-            self.hard_drop()
-        self.draw()
