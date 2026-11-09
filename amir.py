@@ -1,15 +1,6 @@
-# модуль деңгейі (класстан тыс)
-SHAPES = {
-    "I": [(-1, 0), (0, 0), (1, 0), (2, 0)],
-    "O": [(0, 0), (1, 0), (0, 1), (1, 1)],
-    "T": [(-1, 0), (0, 0), (1, 0), (0, 1)],
-    "S": [(0, 0), (1, 0), (-1, 1), (0, 1)],
-    "Z": [(-1, 0), (0, 0), (0, 1), (1, 1)],
-    "J": [(-1, 0), (0, 0), (1, 0), (-1, 1)],
-    "L": [(-1, 0), (0, 0), (1, 0), (1, 1)],
-}
+self.spawn()
+        self.tick()
 
-# класс ішіндегі әдістер
     def spawn(self):
         self.name = self.next_name
         self.next_name = random.choice(list(SHAPES))
@@ -44,7 +35,12 @@ SHAPES = {
                 self.x += kick
                 return
 
-    def hard_drop(self):
-        while self.move(0, 1):
-            self.score += 2
-        self.lock()
+    def lock(self):
+        for dx, dy in self.cells:
+            if self.y + dy >= 0:
+                self.board[self.y + dy][self.x + dx] = self.name
+        self.clear_lines()
+        self.spawn()
+
+    def clear_lines(self):
+        kept = [row for row in self.board if not all(row)]
