@@ -1,0 +1,1128 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Тетрис на Python</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;700;900&display=swap">
+<style>
+/* Layout concept: полноэкранные слайды поверх падающего тетриса; три выдвижные панели (код, слайды, тона) */
+:root{
+  --bg:#10131f; --bg2:#1a2038; --fg:#eef1fb; --muted:#a9b0ca; --dim:#7b84a6;
+  --line:rgba(255,255,255,.13); --glass:rgba(13,16,30,.78); --glass2:rgba(255,255,255,.06);
+  --ink:#0d1020;
+  --c1:#3cdce6; --c2:#f0d23c; --c3:#aa5adc; --c4:#466ee6; --c5:#f09632; --c6:#50c864; --c7:#e64650;
+  --accent:var(--c1); --sc:var(--c1);
+  --display:'Unbounded','Arial Black',system-ui,sans-serif;
+  --body:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--body);overflow:hidden;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--sc);outline-offset:2px;border-radius:6px}
+#glow{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(60% 50% at 15% 0%,color-mix(in srgb,var(--c3) 26%,transparent),transparent 70%),
+             radial-gradient(55% 50% at 100% 100%,color-mix(in srgb,var(--c1) 22%,transparent),transparent 70%)}
+#bg{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.55}
+#app{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;margin:0 auto;max-width:1320px;min-width:0}
+
+/* top + bottom bars */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0 6px}
+.brand{display:flex;align-items:center;gap:10px;font:700 12px var(--display);letter-spacing:.12em;text-transform:uppercase}
+.brand .logo{display:grid;grid-template-columns:repeat(2,9px);gap:2px}
+.brand .logo i{width:9px;height:9px;border-radius:2px}
+.brand .logo i:nth-child(1){background:var(--c1)}.brand .logo i:nth-child(2){background:var(--c3)}
+.brand .logo i:nth-child(3){background:var(--c2)}.brand .logo i:nth-child(4){background:var(--c7)}
+.brand small{font:500 12px var(--body);letter-spacing:0;text-transform:none;color:var(--muted)}
+.bar{display:flex;align-items:center;gap:10px;padding:8px 0 10px}
+.bar .prog{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.bar .meta{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted)}
+#mNum{white-space:nowrap}
+.bar .meta b{color:var(--fg);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.track{height:5px;border-radius:5px;background:var(--glass2);overflow:hidden}
+.track i{display:block;height:100%;width:10%;background:var(--sc);border-radius:5px;transition:width .4s,background .4s}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:12px;border:1px solid var(--line);background:var(--glass);font-weight:700;font-size:13px;transition:transform .15s,background .2s,border-color .2s}
+.btn:hover{border-color:var(--sc);transform:translateY(-1px)}
+.btn:active{transform:none}
+.btn.primary{background:var(--sc);color:var(--ink);border-color:transparent}
+.btn.sm{padding:6px 10px;font-size:12px;border-radius:9px}
+.btn svg{width:16px;height:16px;flex:none}
+.btn[disabled]{opacity:.4;cursor:default;transform:none}
+.nav{width:42px;height:42px;padding:0;justify-content:center;border-radius:12px}
+.tools{display:flex;gap:8px}
+@media(max-width:640px){.btn .lbl{display:none}.tools .btn{padding:9px 11px}.brand small{display:none}}
+
+/* stage + slides */
+#stage{position:relative;flex:1;min-height:0;overflow:hidden;overflow:clip}
+.slide{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;opacity:0;visibility:hidden;pointer-events:none;
+  transform:translateX(48px);transition:opacity .45s,transform .45s,visibility 0s .45s;scrollbar-width:thin}
+.slide.prev{transform:translateX(-48px)}
+.slide.active{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition:opacity .45s,transform .45s}
+.wrap{padding:14px 0 28px;display:flex;flex-direction:column;gap:18px;min-height:100%;justify-content:center}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;align-self:flex-start;font:600 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  padding:6px 12px 6px 8px;border-radius:999px;background:var(--glass);border:1px solid var(--line)}
+.eyebrow::before{content:"";width:14px;height:14px;border-radius:4px;background:var(--sc);box-shadow:0 0 14px var(--sc)}
+h1,h2,h3{font-family:var(--display);margin:0;line-height:1.1;text-wrap:balance}
+h2{font-size:clamp(24px,3.6vw,42px);font-weight:700;letter-spacing:-.01em}
+h3{font-size:15px;font-weight:700;letter-spacing:.01em}
+p{margin:0;text-wrap:pretty}
+.lead{font-size:clamp(15px,1.7vw,18px);color:var(--muted);max-width:68ch}
+.lead b,.card b{color:var(--fg)}
+.card{background:var(--glass);border:1px solid var(--line);border-radius:18px;padding:18px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);min-width:0}
+.card h3{margin-bottom:10px}
+.grid{display:grid;gap:16px;min-width:0}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.g12{grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr)}
+@media(max-width:900px){.g2,.g3,.g4,.g12{grid-template-columns:minmax(0,1fr)}.g4.keep2{grid-template-columns:repeat(2,minmax(0,1fr))}}
+code,.mono{font-family:var(--mono);font-size:.92em}
+code{background:var(--glass2);padding:1px 6px;border-radius:6px;color:var(--fg)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font:600 12px var(--mono);
+  background:color-mix(in srgb,var(--sc) 18%,transparent);border:1px solid color-mix(in srgb,var(--sc) 45%,transparent)}
+.muted{color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.kbd{display:inline-grid;place-items:center;min-width:30px;height:30px;padding:0 8px;border-radius:8px;border:1px solid var(--line);border-bottom-width:3px;background:var(--glass2);font:600 12px var(--mono)}
+
+/* matrices */
+.mx{display:grid;gap:3px;--s:22px;width:max-content}
+.mx i{width:var(--s);height:var(--s);border-radius:5px;background:rgba(255,255,255,.07)}
+.mx i.on{background:var(--col,var(--sc));box-shadow:inset 0 0 0 2px rgba(255,255,255,.24)}
+.mx.num i{display:grid;place-items:center;font:600 11px var(--mono);font-style:normal;color:var(--dim)}
+.mx.num i.on{color:var(--ink)}
+
+/* title slide */
+.hero{align-items:flex-start}
+.hero h1{font-size:clamp(46px,12.5vw,150px);font-weight:900;letter-spacing:.01em;line-height:.95;display:flex;flex-wrap:wrap;gap:0 .02em}
+.hero h1 span{display:inline-block;animation:drop .8s cubic-bezier(.2,.9,.3,1.2) both}
+@keyframes drop{from{transform:translateY(-120%);opacity:0}to{transform:none;opacity:1}}
+.team{display:flex;flex-wrap:wrap;gap:10px}
+.person{display:flex;align-items:center;gap:10px;padding:8px 14px 8px 8px;border-radius:14px;background:var(--glass);border:1px solid var(--line);font-weight:700}
+.person i{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font:700 13px var(--display);font-style:normal;color:var(--ink)}
+.hint{display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--muted);font-size:13px}
+.hint span{display:inline-flex;align-items:center;gap:6px}
+
+/* file cards */
+.files{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media(max-width:900px){.files{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.file{position:relative;text-align:left;padding:16px;border-radius:16px;border:1px solid var(--line);background:var(--glass);display:flex;flex-direction:column;gap:8px;min-width:0;transition:transform .2s,border-color .2s,background .2s}
+.file:hover{transform:translateY(-3px)}
+.file .nm{font:700 15px var(--mono)}
+.file .ln{font:500 12px var(--mono);color:var(--muted)}
+.file .tag{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:var(--ink);font:800 12px var(--display)}
+.file[aria-pressed="true"]{border-color:var(--fc);background:color-mix(in srgb,var(--fc) 14%,var(--glass));box-shadow:0 0 0 1px var(--fc),0 10px 30px -12px var(--fc)}
+.arrowline{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:500 12px var(--mono);color:var(--muted)}
+.arrowline b{color:var(--fg)}
+.list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.list li{display:flex;gap:10px;align-items:flex-start}
+.list li::before{content:"";flex:none;width:8px;height:8px;margin-top:8px;border-radius:2px;background:var(--sc)}
+
+/* constants */
+.cbtn{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--glass2);font:600 13px var(--mono)}
+.cbtn span:last-child{color:var(--muted);font:500 12px var(--body);text-align:right}
+.cbtn.on,.cbtn:hover{border-color:var(--sc);background:color-mix(in srgb,var(--sc) 14%,transparent)}
+.svgbox{width:100%;max-width:420px;margin:0 auto;display:block}
+.svgbox text{font-family:var(--mono);font-size:11px;fill:var(--fg)}
+.hl{opacity:0;transition:opacity .25s}.hl.on{opacity:1}
+.shapes{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+@media(max-width:700px){.shapes{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.shp{display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 4px;border-radius:12px;border:1px solid var(--line);background:var(--glass2);font:700 13px var(--mono)}
+.shp:hover,.shp.on{border-color:var(--col);background:color-mix(in srgb,var(--col) 14%,transparent)}
+.shp .mx{--s:14px;gap:2px}
+
+/* piece slide */
+.tree{display:flex;flex-direction:column;align-items:center;gap:0}
+.tree .root{padding:12px 16px;border-radius:14px;border:1px solid var(--line);background:var(--glass2);width:100%;max-width:340px}
+.tree .root b{font:700 14px var(--mono)}
+.tree .stem{width:2px;height:16px;background:var(--line)}
+.kids{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;position:relative;padding-top:12px}
+.kids::before{content:"";position:absolute;top:0;left:8%;right:8%;height:2px;background:var(--line)}
+.kid{position:relative;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--glass2);font:600 12px var(--mono);display:flex;flex-direction:column;align-items:center;gap:2px}
+.kid.on{border-color:var(--col);background:color-mix(in srgb,var(--col) 16%,transparent)}
+.kid em{font:600 10px var(--body);font-style:normal;color:var(--c5)}
+.steps3{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.steps3 .st{display:flex;flex-direction:column;gap:6px;align-items:center}
+.steps3 .st small{font:500 11px var(--mono);color:var(--muted)}
+.steps3 .ar{font:700 20px var(--mono);color:var(--muted)}
+.kindbar{display:flex;flex-wrap:wrap;gap:6px}
+.kindbar button{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--glass2);font:800 14px var(--mono)}
+.kindbar button[aria-pressed="true"]{background:var(--col);color:var(--ink);border-color:transparent}
+
+/* board playground */
+.board{display:grid;gap:1px;padding:6px;border-radius:12px;background:rgba(255,255,255,.05);width:max-content;max-width:100%;border:1px solid var(--line)}
+.board i{width:var(--s);height:var(--s);border-radius:4px;background:rgba(10,12,24,.8);border:1px solid rgba(72,80,108,.5)}
+.board i.f{border-color:transparent;background:var(--col);box-shadow:inset 0 0 0 2px rgba(255,255,255,.22)}
+.board i.p{border-color:transparent;background:var(--col);box-shadow:inset 0 0 0 2px rgba(255,255,255,.32),0 0 12px var(--col)}
+.board i.g{background:transparent;border:2px solid var(--col)}
+.board i.flash{animation:flash .5s}
+@keyframes flash{50%{background:#fff;border-color:#fff}}
+.out{font:500 13px var(--mono);padding:12px;border-radius:12px;background:rgba(0,0,0,.35);border:1px solid var(--line);min-height:68px;overflow-wrap:anywhere}
+.out .ok{color:var(--c6);font-weight:700}.out .no{color:var(--c7);font-weight:700}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{padding:7px 12px;border-radius:10px;border:1px solid var(--line);background:var(--glass2);font:600 12px var(--mono)}
+.tab[aria-selected="true"]{background:var(--sc);color:var(--ink);border-color:transparent}
+
+/* game slide */
+.keyrow{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;width:100%;text-align:left;padding:8px 10px;border-radius:12px;border:1px solid var(--line);background:var(--glass2)}
+.keyrow:hover,.keyrow[aria-pressed="true"]{border-color:var(--sc);background:color-mix(in srgb,var(--sc) 14%,transparent)}
+.keyrow .kbd{min-width:44px}
+.keyrow span:last-child{font:500 12px var(--mono);color:var(--muted);overflow-wrap:anywhere}
+.attr{display:flex;flex-wrap:wrap;gap:6px}
+.attr button{padding:5px 9px;border-radius:9px;border:1px solid var(--line);background:var(--glass2);font:600 12px var(--mono)}
+.attr button[aria-pressed="true"]{background:color-mix(in srgb,var(--sc) 22%,transparent);border-color:var(--sc)}
+.detail{min-height:96px}
+
+/* speed */
+input[type=range]{width:100%;accent-color:var(--sc);height:28px}
+.big{font:800 clamp(28px,4vw,44px) var(--display);color:var(--sc);font-variant-numeric:tabular-nums}
+.bars{display:flex;flex-direction:column;gap:4px}
+.bars div{display:grid;grid-template-columns:34px 1fr 52px;gap:8px;align-items:center;font:500 11px var(--mono);color:var(--muted)}
+.bars span.b{height:10px;border-radius:5px;background:var(--glass2);position:relative;overflow:hidden}
+.bars span.b i{position:absolute;inset:0 auto 0 0;background:var(--sc);border-radius:5px;opacity:.55}
+.bars div.cur{color:var(--fg)}.bars div.cur span.b i{opacity:1}
+.bars div.no span.b i{background:repeating-linear-gradient(45deg,var(--dim) 0 4px,transparent 4px 8px);opacity:.5}
+.fall{position:relative;width:34px;height:var(--fh,240px);border-radius:8px;background:rgba(0,0,0,.35);border:1px solid var(--line);flex:none}
+.fall i{position:absolute;left:2px;width:28px;height:var(--fc,23px);border-radius:5px;background:var(--sc);box-shadow:inset 0 0 0 2px rgba(255,255,255,.25)}
+.pts button.on{background:var(--sc);color:var(--ink);border-color:transparent}
+
+/* loop */
+.cl{display:flex;gap:10px;white-space:pre;padding:0 10px;min-height:1.65em}
+.cl.on{background:color-mix(in srgb,var(--sc) 22%,transparent);box-shadow:inset 3px 0 0 var(--sc)}
+.code{font:500 12.5px/1.65 var(--mono);overflow-x:auto;border-radius:12px;background:rgba(0,0,0,.4);border:1px solid var(--line);padding:8px 0}
+.code .no{flex:none;width:2.6em;text-align:right;color:var(--dim);user-select:none}
+.code .tx{flex:1}
+.hk{color:#c792ea}.hs{color:#9ee493}.hc{color:#7b84a6;font-style:italic}.hn{color:#f6a96a}.hf{color:#7cc5ff}.hb{color:#ffd479}
+.flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.node{padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--glass2);font:600 12px var(--mono);transition:all .25s}
+.node.on{background:var(--sc);color:var(--ink);border-color:transparent;transform:scale(1.06)}
+.meter{height:12px;border-radius:8px;background:rgba(0,0,0,.4);overflow:hidden;border:1px solid var(--line)}
+.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--c1),var(--sc))}
+
+/* demo */
+.demo{display:grid;grid-template-columns:auto minmax(0,1fr);gap:16px;align-items:start}
+@media(max-width:820px){.demo{grid-template-columns:minmax(0,1fr)}}
+.cvwrap{position:relative;width:max-content;max-width:100%;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#10131f;margin:0 auto}
+#demoCv{display:block;max-width:100%;height:auto}
+.veil{position:absolute;inset:0;display:grid;place-items:center;background:rgba(8,10,20,.72);text-align:center;padding:16px}
+.veil[hidden]{display:none}
+.stat{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media(max-width:460px){.stat{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stat div{padding:8px 10px;border-radius:12px;background:var(--glass2);border:1px solid var(--line)}
+.stat small{display:block;font:500 11px var(--mono);color:var(--muted)}
+.stat b{font:700 18px var(--mono);font-variant-numeric:tabular-nums}
+.pad{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.pad .btn{justify-content:center;padding:10px 4px}
+.mods{display:flex;flex-wrap:wrap;gap:6px}
+.mod{padding:5px 10px;border-radius:9px;border:1px solid var(--line);font:600 12px var(--mono);color:var(--muted);transition:all .2s}
+.mod.on{color:var(--ink);background:var(--mc);border-color:transparent;box-shadow:0 0 14px var(--mc)}
+.log{font:500 12px/1.5 var(--mono);display:flex;flex-direction:column;gap:3px;max-height:196px;overflow:hidden}
+.log div{display:flex;gap:8px;min-width:0}
+.log b{flex:none;font-weight:700}
+.log span{overflow-wrap:anywhere;color:var(--muted)}
+.log div:first-child span{color:var(--fg)}
+
+/* qa */
+details{border:1px solid var(--line);border-radius:14px;background:var(--glass);padding:0;overflow:hidden}
+details[open]{border-color:color-mix(in srgb,var(--sc) 55%,transparent)}
+summary{cursor:pointer;list-style:none;padding:12px 16px;font-weight:700;display:flex;justify-content:space-between;gap:12px;align-items:center}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font:700 20px var(--mono);color:var(--sc);transition:transform .2s}
+details[open] summary::after{transform:rotate(45deg)}
+details .ans{padding:0 16px 14px;color:var(--muted)}
+details .ans b{color:var(--fg)}
+.qa{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}
+@media(max-width:900px){.qa{grid-template-columns:minmax(0,1fr)}}
+.facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media(max-width:700px){.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.facts div{padding:12px;border-radius:14px;background:var(--glass);border:1px solid var(--line)}
+.facts b{display:block;font:800 26px var(--display);color:var(--sc)}
+.facts small{color:var(--muted)}
+
+/* drawers */
+#scrim{position:fixed;inset:0;z-index:40;background:rgba(4,6,14,.55);opacity:0;pointer-events:none;transition:opacity .3s}
+#scrim.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;z-index:50;background:var(--panel,#0f1226);background:color-mix(in srgb,#0b0e1e 94%,var(--sc));border:1px solid var(--line);
+  visibility:hidden;transition:transform .38s cubic-bezier(.2,.8,.2,1),visibility 0s .38s;display:flex;flex-direction:column;box-shadow:0 0 60px rgba(0,0,0,.5)}
+.drawer.open{visibility:visible;transform:none!important;transition:transform .38s cubic-bezier(.2,.8,.2,1)}
+.drawer header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.drawer header h3{font-size:14px}
+.drawer .body{padding:14px 16px;overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:14px}
+#dCode{top:0;right:0;bottom:0;width:min(560px,100vw);transform:translateX(100%);border-radius:18px 0 0 18px;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+#dTone{top:0;left:0;bottom:0;width:min(340px,100vw);transform:translateX(-100%);border-radius:0 18px 18px 0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+#dMenu{left:0;right:0;bottom:0;height:min(62%,440px);transform:translateY(100%);border-radius:20px 20px 0 0;padding-bottom:env(safe-area-inset-bottom,0px)}
+.tone{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:var(--glass2)}
+.tone[aria-pressed="true"]{border-color:var(--sc);background:color-mix(in srgb,var(--sc) 14%,transparent)}
+.tone .sw{display:grid;grid-template-columns:repeat(7,12px);gap:3px;flex:none}
+.tone .sw i{height:20px;border-radius:3px}
+.tone b{font-weight:700}
+.switch{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.menu{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+@media(max-width:900px){.menu{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.mi{display:flex;flex-direction:column;gap:6px;text-align:left;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--glass2);min-width:0}
+.mi:hover,.mi[aria-current="true"]{border-color:var(--mc);background:color-mix(in srgb,var(--mc) 14%,transparent)}
+.mi small{font:700 11px var(--mono);color:var(--mc)}
+.mi span{font-weight:700;font-size:13px}
+.notes li{margin-bottom:6px}
+.who{color:var(--muted)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition-duration:.01s!important}}
+</style>
+
+<div id="glow"></div>
+<canvas id="bg" aria-hidden="true"></canvas>
+
+<div id="app">
+  <div class="top">
+    <div class="brand"><span class="logo"><i></i><i></i><i></i><i></i></span>Tetris <small>Python · pygame · ООП</small></div>
+    <div class="row muted" style="font-size:12px"><span class="kbd">←</span><span class="kbd">→</span> слайды</div>
+  </div>
+
+  <main id="stage">
+
+  <!-- 1. Титул -->
+  <section class="slide" data-title="Титул" style="--sc:var(--c1)"><div class="wrap hero">
+    <span class="eyebrow">Итоговый проект</span>
+    <h1 aria-label="Тетрис"><span style="color:var(--c1)">T</span><span style="color:var(--c2);animation-delay:.08s">E</span><span style="color:var(--c3);animation-delay:.16s">T</span><span style="color:var(--c7);animation-delay:.24s">R</span><span style="color:var(--c6);animation-delay:.32s">I</span><span style="color:var(--c5);animation-delay:.4s">S</span></h1>
+    <p class="lead">Игра на <b>Python и pygame</b>, написанная на классах. Четыре файла, один игровой цикл, десять классов. Дальше по слайдам разберём, какая часть кода за что отвечает.</p>
+    <div class="team" id="team"></div>
+    <div class="hint">
+      <span><span class="kbd">←</span><span class="kbd">→</span> листать</span>
+      <span>справа выдвигается <b>код</b> и заметки докладчика</span>
+      <span>слева <b>тона</b> и фон</span>
+      <span>снизу <b>карта слайдов</b></span>
+    </div>
+  </div></section>
+
+  <!-- 2. Архитектура -->
+  <section class="slide" data-title="Архитектура: четыре файла" style="--sc:var(--c2)"><div class="wrap">
+    <span class="eyebrow">Структура проекта</span>
+    <h2>Четыре файла, у каждого одна задача</h2>
+    <p class="lead">Нажми на файл, чтобы увидеть, что в нём лежит и что он подключает. Зависимости идут в одну сторону, поэтому циклических импортов нет.</p>
+    <div class="files" id="files"></div>
+    <div class="grid g12">
+      <div class="card"><h3 id="fileTitle">game.py</h3><ul class="list" id="fileList"></ul>
+        <div class="row" style="margin-top:14px"><button class="btn primary sm" id="fileCode">Открыть код файла</button></div></div>
+      <div class="card"><h3>Кто кого подключает</h3>
+        <div class="arrowline"><b>main.py</b> → <code>from game import Game</code></div>
+        <div class="arrowline" style="margin-top:8px"><b>game.py</b> → <code>from objects import Board, create_piece</code></div>
+        <div class="arrowline" style="margin-top:8px"><b>game.py, objects.py</b> → <code>from settings import ...</code></div>
+        <p class="muted" style="margin-top:12px">Правило простое: <b>settings</b> никого не знает, <b>objects</b> знает только settings, <b>game</b> собирает всё вместе, а <b>main</b> лишь запускает окно.</p></div>
+    </div>
+  </div></section>
+
+  <!-- 3. settings -->
+  <section class="slide" data-title="settings.py: константы" style="--sc:var(--c3)"><div class="wrap">
+    <span class="eyebrow">settings.py</span>
+    <h2>Константы: размеры поля и фигуры</h2>
+    <p class="lead">Все числа лежат в одном месте. Поменяй <code>CELL</code>, и поле изменится целиком. Наведи на константу, чтобы увидеть, что она задаёт в окне 600 × 680.</p>
+    <div class="grid g2">
+      <div class="card"><div class="list" id="consts" style="gap:8px"></div></div>
+      <div class="card">
+        <svg class="svgbox" viewBox="0 0 300 340" role="img" aria-label="Схема окна: поле 10 на 20 клеток и боковая панель">
+          <rect x="0.5" y="0.5" width="299" height="339" rx="8" fill="rgba(0,0,0,.35)" stroke="rgba(255,255,255,.25)"/>
+          <g id="svgGrid"></g>
+          <rect x="15" y="20" width="150" height="300" fill="none" stroke="rgba(255,255,255,.55)"/>
+          <g fill="rgba(255,255,255,.55)"><rect x="178" y="26" width="70" height="8" rx="2"/><rect x="178" y="62" width="52" height="5" rx="2" opacity=".6"/><rect x="178" y="82" width="52" height="5" rx="2" opacity=".6"/><rect x="178" y="102" width="52" height="5" rx="2" opacity=".6"/></g>
+          <text x="178" y="146" style="fill:var(--muted)">панель, x = 355</text>
+          <g class="hl" data-k="CELL"><rect x="15" y="20" width="15" height="15" fill="var(--sc)" opacity=".85"/><text x="36" y="32">CELL = 30 px</text></g>
+          <g class="hl" data-k="COLS"><path d="M15 12h150M15 8v8M165 8v8" stroke="var(--sc)" stroke-width="2" fill="none"/><text x="60" y="8">COLS = 10 → 300 px</text></g>
+          <g class="hl" data-k="ROWS"><path d="M8 20v300M4 20h8M4 320h8" stroke="var(--sc)" stroke-width="2" fill="none"/><text transform="translate(22 175) rotate(-90)" style="fill:var(--sc);font-weight:700" x="-52" y="3">ROWS = 20</text></g>
+          <g class="hl" data-k="BOARD"><path d="M0 20h15M15 0v20" stroke="var(--sc)" stroke-width="2"/><circle cx="15" cy="20" r="4" fill="var(--sc)"/><text x="20" y="14" style="fill:var(--sc)">X=30, Y=40</text></g>
+        </svg>
+        <p class="muted" style="text-align:center;margin-top:8px;font-size:12px">масштаб 1 : 2</p>
+      </div>
+    </div>
+    <div class="card"><h3>SHAPES и COLORS: семь тетромино</h3><div class="shapes" id="shapes"></div>
+      <p class="muted" id="shapeNote" style="margin-top:12px">Единицы в матрице заполнены, нули пусты. Ключ буквы одинаковый в <code>SHAPES</code> и <code>COLORS</code>.</p></div>
+  </div></section>
+
+  <!-- 4. Piece -->
+  <section class="slide" data-title="Piece и наследование" style="--sc:var(--c4)"><div class="wrap">
+    <span class="eyebrow">objects.py · Piece</span>
+    <h2>Фигура — это класс, а семь видов — его наследники</h2>
+    <div class="grid g12">
+      <div class="card">
+        <h3>Поворот: <code>zip(*shape[::-1])</code></h3>
+        <div class="kindbar" id="kindbar" style="margin-bottom:14px"></div>
+        <div class="steps3" id="rotSteps"></div>
+        <p class="muted" id="rotNote" style="margin-top:12px"></p>
+        <div class="row" style="margin-top:12px"><button class="btn primary sm" id="rotBtn">rotate()</button><button class="btn sm" id="rotReset">Сбросить</button><span class="chip" id="spawnChip"></span></div>
+      </div>
+      <div class="card">
+        <h3>Наследование</h3>
+        <div class="tree">
+          <div class="root"><b>class Piece</b><div class="muted mono" style="font-size:11.5px;margin-top:4px">kind, color, shape, x, y<br>get_shape() · rotated() · rotate()</div></div>
+          <div class="stem"></div>
+          <div class="kids" id="kids"></div>
+        </div>
+        <p class="muted" style="margin-top:12px"><b>OPiece</b> переопределяет <code>rotated()</code>: квадрат при повороте не меняется. Остальные шесть подклассов просто вызывают <code>super().__init__(kind)</code>.</p>
+      </div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><h3>Зачем подклассы</h3><p class="muted">Каждый подкласс хранит только свою букву. Общее поведение лежит в <b>Piece</b>, а различия вроде квадрата решаются переопределением. Это и есть полиморфизм: <code>Game.rotate()</code> зовёт <code>current.rotated()</code> и не спрашивает, какая это фигура.</p></div>
+      <div class="card"><h3>Фабрика <code>create_piece()</code></h3><p class="muted">Словарь <code>PIECE_CLASSES</code> связывает букву с классом. <code>create_piece()</code> без аргумента берёт случайную букву, с аргументом создаёт нужную. Так <code>hold()</code> возвращает отложенную фигуру по её букве.</p></div>
+    </div>
+  </div></section>
+
+  <!-- 5. Board -->
+  <section class="slide" data-title="Board: поле" style="--sc:var(--c5)"><div class="wrap">
+    <span class="eyebrow">objects.py · Board</span>
+    <h2>Поле хранит клетки и отвечает на вопрос «можно ли сюда?»</h2>
+    <p class="lead"><b>Задача:</b> передвинь фигуру T влево на одну клетку, опусти до дна, затем нажми <code>place()</code> и <code>clear_lines()</code>. Под полем видно, что вернула каждая функция.</p>
+    <div class="grid g2">
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <div id="miniBoard" style="--s:clamp(20px,5.4vw,30px)"></div>
+        <div class="row" id="miniCtl"></div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:12px">
+        <div class="tabs" role="tablist" id="bTabs"></div>
+        <div id="bText" class="muted"></div>
+        <div class="out" id="bOut">Здесь появится вызов и результат.</div>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- 6. Game -->
+  <section class="slide" data-title="Game: состояние и управление" style="--sc:var(--c6)"><div class="wrap">
+    <span class="eyebrow">game.py · Game</span>
+    <h2>Game помнит состояние и превращает клавиши в действия</h2>
+    <div class="grid g2">
+      <div class="card" style="display:flex;flex-direction:column;gap:10px">
+        <h3>Клавиши → методы</h3>
+        <div id="keys" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:12px">
+        <h3 id="kTitle">Что делает метод</h3>
+        <div class="detail muted" id="kText"></div>
+        <h3 style="margin-top:6px">Что хранит <code>restart()</code></h3>
+        <div class="attr" id="attrs"></div>
+        <div class="muted" id="attrText" style="min-height:48px"></div>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- 7. Speed -->
+  <section class="slide" data-title="Скорость, уровни и очки" style="--sc:var(--c7)"><div class="wrap">
+    <span class="eyebrow">game.py · update · lock_piece</span>
+    <h2>Скорость, уровни и очки: три формулы</h2>
+    <div class="grid g2">
+      <div class="card" style="display:flex;flex-direction:column;gap:12px">
+        <label for="lines" style="display:flex;justify-content:space-between;gap:10px;font-weight:700"><span>Собрано линий</span><span class="mono" id="linesVal">0</span></label>
+        <input id="lines" type="range" min="0" max="100" value="0">
+        <div class="grid g3 keep2" style="gap:10px">
+          <div><div class="muted mono" style="font-size:11px">level</div><div class="big" id="lvl">1</div></div>
+          <div><div class="muted mono" style="font-size:11px">speed, мс</div><div class="big" id="spd">650</div></div>
+          <div><div class="muted mono" style="font-size:11px">клеток в секунду</div><div class="big" id="cps">1.5</div></div>
+        </div>
+        <div class="mono muted" style="font-size:12px;line-height:1.8">level = lines // 10 + 1<br>speed = max(90, 650 − (level − 1) × 45)</div>
+        <div id="winNote" class="out" hidden></div>
+        <div style="display:flex;gap:14px;align-items:flex-end">
+          <div class="fall" id="fall"><i id="fallB"></i></div>
+          <p class="muted" style="font-size:13px">Блок падает с той же скоростью, что и фигура на этом уровне.</p>
+        </div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:12px">
+        <h3>Очки за линии: <code>points[cleared] × level</code></h3>
+        <div class="row pts" id="pts"></div>
+        <div class="out" id="ptsOut"></div>
+        <h3>Скорость по уровням</h3>
+        <div class="bars" id="bars"></div>
+        <p class="muted" style="font-size:13px">Мягкий спуск ↓ даёт <b>+1</b> за клетку, жёсткий Space — <b>+2</b> за каждую пролетевшую клетку.</p>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- 8. Loop -->
+  <section class="slide" data-title="Игровой цикл main.py" style="--sc:var(--c1)"><div class="wrap">
+    <span class="eyebrow">main.py</span>
+    <h2>Один кадр — семь шагов</h2>
+    <p class="lead">Цикл крутится 60 раз в секунду. Листай шаги или запусти автоплей, подсвеченная строка показывает, где сейчас выполнение.</p>
+    <div class="grid g2">
+      <div class="card" style="display:flex;flex-direction:column;gap:12px">
+        <div class="code" id="loopCode"></div>
+        <div class="row"><button class="btn sm" id="lpPrev">← Шаг</button><button class="btn sm" id="lpNext">Шаг →</button><button class="btn primary sm" id="lpPlay">Автоплей</button></div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:12px">
+        <div class="flow" id="lpFlow"></div>
+        <div class="muted" id="lpText" style="min-height:70px"></div>
+        <div><div class="row" style="justify-content:space-between;font:500 12px var(--mono);color:var(--muted)"><span>fall_timer</span><span id="ftTxt">0 / 650 мс</span></div><div class="meter"><i id="ftBar"></i></div></div>
+        <p class="muted" style="font-size:13px">Каждый кадр добавляет в <code>fall_timer</code> число <code>dt</code>. Когда накопилось 650 мс (примерно 39 кадров на уровне 1), фигура падает на клетку, а таймер обнуляется.</p>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- 9. Demo -->
+  <section class="slide" data-title="Живая демонстрация" style="--sc:var(--c2)"><div class="wrap">
+    <span class="eyebrow">Живая демонстрация</span>
+    <h2>Играй и смотри, какая часть кода сработала</h2>
+    <div class="demo">
+      <div>
+        <div class="cvwrap" id="cvwrap"><canvas id="demoCv" width="240" height="480"></canvas>
+          <div class="veil" id="veil"><div style="display:flex;flex-direction:column;gap:12px;align-items:center"><b style="font:700 18px var(--display)">Нажми, чтобы играть</b><span class="muted" style="font-size:13px">Стрелки, Space, C, P, R.<br>Esc возвращает листание слайдов.</span><button class="btn primary" id="startBtn">Старт</button></div></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+        <div class="stat" id="dStat"></div>
+        <div class="card" style="padding:12px"><div class="mods" id="mods"></div></div>
+        <div class="card" style="padding:12px"><div class="log" id="dLog"></div></div>
+        <div class="pad" id="pad"></div>
+      </div>
+    </div>
+  </div></section>
+
+  <!-- 10. Q&A -->
+  <section class="slide" data-title="Вопросы на защите" style="--sc:var(--c3)"><div class="wrap">
+    <span class="eyebrow">Итоги</span>
+    <h2>Вопросы, которые могут задать</h2>
+    <div class="facts" id="facts"></div>
+    <div class="qa" id="qa"></div>
+  </div></section>
+
+  </main>
+
+  <nav class="bar" aria-label="Навигация по слайдам">
+    <button class="btn nav" id="prev" aria-label="Предыдущий слайд"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="prog"><div class="meta"><b id="mTitle"></b><span id="mNum"></span></div><div class="track"><i id="mBar"></i></div></div>
+    <button class="btn nav" id="next" aria-label="Следующий слайд"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+    <div class="tools">
+      <button class="btn" id="bMenu" aria-label="Карта слайдов"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="lbl">Слайды</span></button>
+      <button class="btn" id="bCode" aria-label="Код и заметки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg><span class="lbl">Код</span></button>
+      <button class="btn" id="bTone" aria-label="Тона и фон"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 010 18z" fill="currentColor"/></svg><span class="lbl">Тона</span></button>
+    </div>
+  </nav>
+</div>
+
+<div id="scrim"></div>
+
+<aside class="drawer" id="dCode" aria-label="Код и заметки докладчика">
+  <header><div class="tabs" id="cTabs0"></div><button class="btn sm" data-close aria-label="Закрыть">Закрыть</button></header>
+  <div class="body"><div class="tabs" id="cTabs"></div><div id="cBody"></div></div>
+</aside>
+<aside class="drawer" id="dTone" aria-label="Тона и фон">
+  <header><h3>Тона и фон</h3><button class="btn sm" data-close>Закрыть</button></header>
+  <div class="body">
+    <div id="tones" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="switch"><label for="bgOn" style="font-weight:700">Падающий тетрис</label><input type="checkbox" id="bgOn" checked></div>
+    <div><label for="bgAlpha" style="font-weight:700">Яркость фона</label><input id="bgAlpha" type="range" min="10" max="100" value="55"></div>
+    <div><label for="bgSpeed" style="font-weight:700">Скорость падения</label><input id="bgSpeed" type="range" min="40" max="260" value="180"></div>
+    <button class="btn" id="fsBtn">На весь экран</button>
+  </div>
+</aside>
+<aside class="drawer" id="dMenu" aria-label="Карта слайдов">
+  <header><h3>Карта слайдов</h3><button class="btn sm" data-close>Закрыть</button></header>
+  <div class="body"><div class="menu" id="menu"></div></div>
+</aside>
+
+<script>
+const SRC={"main": "import pygame\nfrom game import Game\n\nWIDTH, HEIGHT = 600, 680\nFPS = 60\n\n\ndef main():\n    pygame.init()\n    screen = pygame.display.set_mode((WIDTH, HEIGHT))\n    pygame.display.set_caption(\"TETRIS\")\n    clock = pygame.time.Clock()\n    game = Game()\n\n    running = True\n    while running:\n        dt = clock.tick(FPS)\n\n        for event in pygame.event.get():\n            if event.type == pygame.QUIT:\n                running = False\n            else:\n                game.handle_event(event)\n\n        game.update(dt)\n        screen.fill((16, 19, 31))\n        game.draw(screen)\n        pygame.display.flip()\n\n    pygame.quit()\n\n\nif __name__ == \"__main__\":\n    main()\n", "settings": "# Константы игры: размеры поля, цвета и формы фигур\n\nCELL = 30\nCOLS = 10\nROWS = 20\nBOARD_X = 30\nBOARD_Y = 40\n\nCOLORS = {\n    \"I\": (60, 220, 230),\n    \"O\": (240, 210, 60),\n    \"T\": (170, 90, 220),\n    \"J\": (70, 110, 230),\n    \"L\": (240, 150, 50),\n    \"S\": (80, 200, 100),\n    \"Z\": (230, 70, 80),\n}\n\nSHAPES = {\n    \"I\": [[1, 1, 1, 1]],\n    \"O\": [[1, 1], [1, 1]],\n    \"T\": [[0, 1, 0], [1, 1, 1]],\n    \"J\": [[1, 0, 0], [1, 1, 1]],\n    \"L\": [[0, 0, 1], [1, 1, 1]],\n    \"S\": [[0, 1, 1], [1, 1, 0]],\n    \"Z\": [[1, 1, 0], [0, 1, 1]],\n}\n", "objects": "import random\nimport pygame\nfrom settings import CELL, COLS, ROWS, BOARD_X, BOARD_Y, COLORS, SHAPES\n\n\nclass Piece:\n    def __init__(self, kind):\n        self.kind = kind\n        self.color = COLORS[kind]\n        self.shape = self.get_shape()\n        self.x = COLS // 2 - len(self.shape[0]) // 2\n        self.y = 0\n\n    def get_shape(self):\n        return [row[:] for row in SHAPES[self.kind]]\n\n    def rotated(self):\n        \"\"\"Возвращает форму после поворота (не меняя саму фигуру).\"\"\"\n        return [list(row) for row in zip(*self.shape[::-1])]\n\n    def rotate(self):\n        self.shape = self.rotated()\n\n\nclass IPiece(Piece):\n    def __init__(self):\n        super().__init__(\"I\")\n\n\nclass OPiece(Piece):\n    def __init__(self):\n        super().__init__(\"O\")\n\n    def rotated(self):\n        # Квадрат при повороте не меняется - переопределяем метод родителя\n        return [row[:] for row in self.shape]\n\n\nclass TPiece(Piece):\n    def __init__(self):\n        super().__init__(\"T\")\n\n\nclass JPiece(Piece):\n    def __init__(self):\n        super().__init__(\"J\")\n\n\nclass LPiece(Piece):\n    def __init__(self):\n        super().__init__(\"L\")\n\n\nclass SPiece(Piece):\n    def __init__(self):\n        super().__init__(\"S\")\n\n\nclass ZPiece(Piece):\n    def __init__(self):\n        super().__init__(\"Z\")\n\n\nPIECE_CLASSES = {\n    \"I\": IPiece, \"O\": OPiece, \"T\": TPiece, \"J\": JPiece,\n    \"L\": LPiece, \"S\": SPiece, \"Z\": ZPiece,\n}\n\n\ndef create_piece(kind=None):\n    if kind is None:\n        kind = random.choice(list(PIECE_CLASSES))\n    return PIECE_CLASSES[kind]()\n\n\nclass Board:\n    def __init__(self):\n        self.cells = [[None for _ in range(COLS)] for _ in range(ROWS)]\n\n    def is_valid(self, piece, dx=0, dy=0, shape=None):\n        shape = shape or piece.shape\n        for row_index, row in enumerate(shape):\n            for col_index, value in enumerate(row):\n                if not value:\n                    continue\n                x = piece.x + col_index + dx\n                y = piece.y + row_index + dy\n                if x < 0 or x >= COLS or y >= ROWS:\n                    return False\n                if y >= 0 and self.cells[y][x] is not None:\n                    return False\n        return True\n\n    def place(self, piece):\n        for row_index, row in enumerate(piece.shape):\n            for col_index, value in enumerate(row):\n                if value:\n                    x = piece.x + col_index\n                    y = piece.y + row_index\n                    if y < 0:\n                        return False\n                    self.cells[y][x] = piece.color\n        return True\n\n    def clear_lines(self):\n        remaining = [row for row in self.cells if any(cell is None for cell in row)]\n        cleared = ROWS - len(remaining)\n        self.cells = [[None for _ in range(COLS)] for _ in range(cleared)] + remaining\n        return cleared\n\n    def draw(self, screen):\n        for y in range(ROWS):\n            for x in range(COLS):\n                rect = pygame.Rect(BOARD_X + x * CELL, BOARD_Y + y * CELL, CELL, CELL)\n                color = self.cells[y][x]\n                if color is not None:\n                    pygame.draw.rect(screen, color, rect.inflate(-2, -2), border_radius=4)\n                pygame.draw.rect(screen, (48, 54, 72), rect, 1)\n", "game": "import pygame\nfrom objects import Board, create_piece\nfrom settings import CELL, COLS, ROWS, BOARD_X, BOARD_Y\n\nWHITE = (240, 243, 250)\nMUTED = (165, 174, 195)\n\n\nclass Game:\n    def __init__(self):\n        self.font = pygame.font.Font(None, 32)\n        self.big_font = pygame.font.Font(None, 48)\n        self.restart()\n\n    def restart(self):\n        self.board = Board()\n        self.current = create_piece()\n        self.score = 0\n        self.lines = 0\n        self.level = 1\n        self.fall_timer = 0\n        self.game_over = False\n        self.paused = False\n        self.won = False\n        self.hold_kind = None\n        self.can_hold = True\n        self.spawn_next = create_piece()\n\n    def spawn(self):\n        self.current = self.spawn_next\n        self.spawn_next = create_piece()\n        self.can_hold = True\n        if not self.board.is_valid(self.current):\n            self.game_over = True\n\n    def move(self, dx, dy):\n        if self.board.is_valid(self.current, dx, dy):\n            self.current.x += dx\n            self.current.y += dy\n            return True\n        return False\n\n    def rotate(self):\n        rotated = self.current.rotated()\n        if self.board.is_valid(self.current, shape=rotated):\n            self.current.shape = rotated\n\n    def ghost_y(self):\n        \"\"\"Функция 4: на какой строке фигура приземлится (проекция).\"\"\"\n        dy = 0\n        while self.board.is_valid(self.current, 0, dy + 1):\n            dy += 1\n        return self.current.y + dy\n\n    def hold(self):\n        \"\"\"Функция 5: отложить текущую фигуру (клавиша C), раз за ход.\"\"\"\n        if not self.can_hold:\n            return\n        kind = self.current.kind\n        if self.hold_kind is None:\n            self.hold_kind = kind\n            self.spawn()\n        else:\n            self.current = create_piece(self.hold_kind)\n            self.hold_kind = kind\n            if not self.board.is_valid(self.current):\n                self.game_over = True\n        self.can_hold = False\n\n    def lock_piece(self):\n        if not self.board.place(self.current):\n            self.game_over = True\n            return\n        cleared = self.board.clear_lines()\n        points = [0, 100, 300, 500, 800]\n        self.score += points[cleared] * self.level\n        self.lines += cleared\n        self.level = self.lines // 10 + 1\n        if self.lines >= 100:\n            self.game_over = True\n            self.won = True\n            return\n        self.spawn()\n\n    def hard_drop(self):\n        while self.move(0, 1):\n            self.score += 2\n        self.lock_piece()\n\n    def handle_event(self, event):\n        if event.type != pygame.KEYDOWN:\n            return\n\n        if event.key == pygame.K_r:\n            self.restart()\n            return\n        if event.key == pygame.K_p and not self.game_over:\n            self.paused = not self.paused\n            return\n        if self.game_over or self.paused:\n            return\n\n        if event.key == pygame.K_LEFT:\n            self.move(-1, 0)\n        elif event.key == pygame.K_RIGHT:\n            self.move(1, 0)\n        elif event.key == pygame.K_DOWN:\n            if self.move(0, 1):\n                self.score += 1\n        elif event.key == pygame.K_UP:\n            self.rotate()\n        elif event.key == pygame.K_SPACE:\n            self.hard_drop()\n        elif event.key == pygame.K_c:\n            self.hold()\n\n    def update(self, dt):\n        if self.game_over or self.paused:\n            return\n        self.fall_timer += dt\n        speed = max(90, 650 - (self.level - 1) * 45)\n        if self.fall_timer >= speed:\n            self.fall_timer = 0\n            if not self.move(0, 1):\n                self.lock_piece()\n\n    def draw_text(self, screen, text, x, y, font=None, color=WHITE):\n        image = (font or self.font).render(text, True, color)\n        screen.blit(image, (x, y))\n\n    def draw(self, screen):\n        self.board.draw(screen)\n        if not self.game_over:\n            ghost_y = self.ghost_y()\n            for row_index, row in enumerate(self.current.shape):\n                for col_index, value in enumerate(row):\n                    if value:\n                        ghost = pygame.Rect(\n                            BOARD_X + (self.current.x + col_index) * CELL,\n                            BOARD_Y + (ghost_y + row_index) * CELL,\n                            CELL, CELL\n                        )\n                        pygame.draw.rect(screen, self.current.color,\n                                         ghost.inflate(-2, -2), 2, border_radius=4)\n            for row_index, row in enumerate(self.current.shape):\n                for col_index, value in enumerate(row):\n                    if value:\n                        rect = pygame.Rect(\n                            BOARD_X + (self.current.x + col_index) * CELL,\n                            BOARD_Y + (self.current.y + row_index) * CELL,\n                            CELL, CELL\n                        )\n                        pygame.draw.rect(screen, self.current.color,\n                                         rect.inflate(-2, -2), border_radius=4)\n\n        panel_x = 355\n        self.draw_text(screen, \"TETRIS\", panel_x, 55, self.big_font)\n        self.draw_text(screen, f\"Score: {self.score}\", panel_x, 130)\n        self.draw_text(screen, f\"Lines: {self.lines}\", panel_x, 175)\n        self.draw_text(screen, f\"Level: {self.level}\", panel_x, 220)\n        hold_text = self.hold_kind if self.hold_kind else \"-\"\n        self.draw_text(screen, f\"Hold: {hold_text}\", panel_x, 265)\n        self.draw_text(screen, \"Controls:\", panel_x, 310)\n        self.draw_text(screen, \"Arrows - move\", panel_x, 350, color=MUTED)\n        self.draw_text(screen, \"Up - rotate\", panel_x, 385, color=MUTED)\n        self.draw_text(screen, \"Space - drop\", panel_x, 420, color=MUTED)\n        self.draw_text(screen, \"C - hold\", panel_x, 455, color=MUTED)\n        self.draw_text(screen, \"P - pause\", panel_x, 490, color=MUTED)\n        self.draw_text(screen, \"R - restart\", panel_x, 525, color=MUTED)\n\n        if self.paused:\n            self.draw_text(screen, \"PAUSED\", 205, 300, self.big_font)\n        if self.game_over:\n            message = \"YOU WIN!\" if self.won else \"GAME OVER\"\n            self.draw_text(screen, message, 175, 300, self.big_font)\n            self.draw_text(screen, \"Press R to restart\", 165, 350)\n"};
+</script>
+<script>
+(function(){
+'use strict';
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const KINDS='IOTJLSZ';
+const SHAPES={I:[[1,1,1,1]],O:[[1,1],[1,1]],T:[[0,1,0],[1,1,1]],J:[[1,0,0],[1,1,1]],L:[[0,0,1],[1,1,1]],S:[[0,1,1],[1,1,0]],Z:[[1,1,0],[0,1,1]]};
+const colOf=k=>`var(--c${KINDS.indexOf(k)+1})`;
+const rotatedShape=sh=>{const rev=sh.slice().reverse();return rev[0].map((_,c)=>rev.map(r=>r[c]));};
+const cp=sh=>sh.map(r=>r.slice());
+const lineCount=s=>s.replace(/\n$/,'').split('\n').length;
+
+/* ===== tones ===== */
+const TONES=[
+ {id:'game',name:'Как в игре',bg:'#10131f',c:['#3cdce6','#f0d23c','#aa5adc','#466ee6','#f09632','#50c864','#e64650']},
+ {id:'neon',name:'Неон',bg:'#0a0818',c:['#35f0ff','#fff05a','#c66bff','#5b7cff','#ff9d3d','#4dff9a','#ff4f86']},
+ {id:'sunset',name:'Закат',bg:'#1a0a16',c:['#ffd27a','#ffb347','#ff7a59','#ff4f7b','#d6409f','#9b5de5','#ffe9a8']},
+ {id:'ocean',name:'Океан',bg:'#06141f',c:['#5ce1e6','#7ee8c1','#38b6ff','#4f7cff','#8fd3ff','#2ec4b6','#b8f2ff']},
+ {id:'forest',name:'Лес',bg:'#08150e',c:['#b6f36a','#e8e46a','#6fdc8c','#3fb68b','#f2b84b','#8bd450','#d9f99d']},
+ {id:'sakura',name:'Сакура',bg:'#1a0d18',c:['#ffb3d1','#ffd6a5','#d7a8ff','#8fa8ff','#ff8fab','#a8e6cf','#fff1b8']}
+];
+let tone=TONES[0];
+function applyTone(t){
+  tone=t;const r=document.documentElement.style;
+  t.c.forEach((c,i)=>r.setProperty('--c'+(i+1),c));r.setProperty('--bg',t.bg);
+  document.body.style.background=t.bg;
+  $$('.tone').forEach(b=>b.setAttribute('aria-pressed',b.dataset.id===t.id));
+  try{localStorage.setItem('tetris-tone',t.id)}catch(e){}
+  BG.recolor();
+}
+
+/* ===== falling tetris background ===== */
+const BG=(()=>{
+  const cv=$('#bg'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W=0,H=0,cell=28,cols=0,rows=0,grid=[],fall=[],stepMs=120,acc=0,last=0,steps=0,on=true,dissolve=false,raf=0;
+  function resize(){
+    const w=innerWidth,h=innerHeight;
+    if(Math.abs(w-W)<2&&Math.abs(h-H)<140&&grid.length)return;
+    W=w;H=h;const dpr=Math.min(devicePixelRatio||1,2);
+    cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0);
+    cell=W<600?20:28;cols=Math.ceil(W/cell);rows=Math.ceil(H/cell);
+    grid=Array.from({length:rows},()=>Array(cols).fill(-1));fall=[];dissolve=false;
+    if(reduce)scatter();draw();
+  }
+  function scatter(){for(let i=0;i<26;i++){const p=newPiece();p.y=rows-2-Math.floor(Math.random()*Math.floor(rows*.25));while(!hit(p,0,1))p.y++;lock(p,true);}}
+  function newPiece(){
+    const k=Math.floor(Math.random()*7);let sh=cp(SHAPES[KINDS[k]]);
+    for(let r=Math.floor(Math.random()*4);r>0&&k!==1;r--)sh=rotatedShape(sh);
+    return{k,sh,x:Math.floor(Math.random()*(cols-sh[0].length+1)),y:-sh.length};
+  }
+  function hit(p,dx,dy){
+    for(let r=0;r<p.sh.length;r++)for(let c=0;c<p.sh[r].length;c++){
+      if(!p.sh[r][c])continue;const x=p.x+c+dx,y=p.y+r+dy;
+      if(x<0||x>=cols||y>=rows)return true;if(y>=0&&grid[y][x]>=0)return true;}
+    return false;
+  }
+  function lock(p,silent){
+    p.sh.forEach((row,r)=>row.forEach((v,c)=>{if(v){const y=p.y+r,x=p.x+c;if(y>=0&&y<rows&&x>=0&&x<cols)grid[y][x]=p.k;}}));
+    for(let y=rows-1;y>=0;y--){if(grid[y].every(v=>v>=0)){grid.splice(y,1);grid.unshift(Array(cols).fill(-1));y++;}}
+  }
+  function top(){for(let y=0;y<rows;y++)if(grid[y].some(v=>v>=0))return y;return rows;}
+  function step(){
+    steps++;
+    for(let i=fall.length-1;i>=0;i--){const p=fall[i];if(hit(p,0,1)){fall.splice(i,1);lock(p);}else p.y++;}
+    const h=rows-top();
+    if(!dissolve&&h>rows*.3)dissolve=true;
+    if(dissolve){const t=top();if(t<rows){grid[t].fill(-1);}if(h<=rows*.08)dissolve=false;}
+    if(steps%5===0&&!dissolve){fall.push(newPiece());}
+  }
+  function cellAt(x,y,k){
+    ctx.fillStyle=tone.c[k];const s=cell-2;ctx.beginPath();
+    if(ctx.roundRect)ctx.roundRect(x*cell+1,y*cell+1,s,s,5);else ctx.rect(x*cell+1,y*cell+1,s,s);
+    ctx.fill();ctx.strokeStyle='rgba(255,255,255,.3)';ctx.lineWidth=1.5;ctx.strokeRect(x*cell+2.5,y*cell+2.5,s-3,s-3);
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)if(grid[y][x]>=0)cellAt(x,y,grid[y][x]);
+    fall.forEach(p=>p.sh.forEach((row,r)=>row.forEach((v,c)=>{if(v&&p.y+r>=0)cellAt(p.x+c,p.y+r,p.k);})));
+  }
+  function loop(t){
+    raf=requestAnimationFrame(loop);
+    if(!on||document.hidden){last=t;return;}
+    acc+=Math.min(t-last,120);last=t;
+    let n=0;while(acc>=stepMs&&n<4){acc-=stepMs;step();n++;}
+    if(n)draw();
+  }
+  addEventListener('resize',resize);
+  resize();
+  if(!reduce)raf=requestAnimationFrame(t=>{last=t;loop(t)});
+  return{
+    recolor(){draw()},
+    setOn(v){on=v;cv.style.visibility=v?'visible':'hidden'},
+    setAlpha(v){cv.style.opacity=v},
+    setSpeed(v){stepMs=v}
+  };
+})();
+
+/* ===== code rendering ===== */
+const TOK=/(#.*$)|("""[^"]*"""|f?"[^"\n]*"|'[^'\n]*')|\b(def|class|return|if|elif|else|for|in|import|from|while|and|or|not|is|try|except|with|as|continue|pass|break)\b|\b(None|True|False|self)\b|\b(\d+)\b|\b([A-Za-z_]\w*)(?=\()/g;
+function hlLine(l){
+  let out='',i=0,m;TOK.lastIndex=0;
+  while((m=TOK.exec(l))){
+    out+=esc(l.slice(i,m.index));const t=esc(m[0]);
+    out+= m[1]?`<span class="hc">${t}</span>`:m[2]?`<span class="hs">${t}</span>`:m[3]?`<span class="hk">${t}</span>`:m[4]?`<span class="hb">${t}</span>`:m[5]?`<span class="hn">${t}</span>`:`<span class="hf">${t}</span>`;
+    i=m.index+m[0].length;
+  }
+  return out+esc(l.slice(i));
+}
+function codeBlock(f,a,b,hl){
+  const ls=SRC[f].replace(/\n$/,'').split('\n');a=a||1;b=b||ls.length;
+  let h='<div class="code">';
+  for(let n=a;n<=b;n++){const on=hl&&hl.includes(n);h+=`<div class="cl${on?' on':''}" data-n="${n}"><span class="no">${n}</span><span class="tx">${hlLine(ls[n-1])}</span></div>`;}
+  return h+'</div>';
+}
+
+/* ===== slide meta: code tabs + notes ===== */
+const CODE={
+ 1:[{t:'main.py',f:'main'}],
+ 2:[{t:'main.py',f:'main'},{t:'settings.py',f:'settings'},{t:'objects.py',f:'objects'},{t:'game.py',f:'game'}],
+ 3:[{t:'settings.py',f:'settings'}],
+ 4:[{t:'Piece',f:'objects',a:6,b:22},{t:'Подклассы',f:'objects',a:25,b:61},{t:'create_piece',f:'objects',a:64,b:73}],
+ 5:[{t:'is_valid',f:'objects',a:80,b:92},{t:'place',f:'objects',a:94,b:103},{t:'clear_lines',f:'objects',a:105,b:109},{t:'draw',f:'objects',a:111,b:118}],
+ 6:[{t:'handle_event',f:'game',a:90,b:115},{t:'move / rotate',f:'game',a:36,b:46},{t:'ghost / hold',f:'game',a:48,b:68},{t:'restart',f:'game',a:15,b:27}],
+ 7:[{t:'update',f:'game',a:117,b:125},{t:'lock_piece',f:'game',a:70,b:83},{t:'hard_drop',f:'game',a:85,b:88}],
+ 8:[{t:'main()',f:'main',a:8,b:30}],
+ 9:[{t:'handle_event',f:'game',a:90,b:115},{t:'update',f:'game',a:117,b:125},{t:'lock_piece',f:'game',a:70,b:83}],
+ 10:[{t:'game.py',f:'game'},{t:'objects.py',f:'objects'}]
+};
+const NOTES={
+ 1:['Проект называется «Тетрис», написан на Python с библиотекой pygame.','Код разделён на четыре файла и десять классов, это основа ООП-подхода.','Сегодня покажем, какая часть кода за что отвечает, и сыграем в живой демонстрации.'],
+ 2:['main.py только создаёт окно и гоняет цикл, вся логика вынесена в Game.','objects.py хранит Piece, семь наследников и Board.','settings.py не импортирует ничего, поэтому от него зависят остальные и нет циклов.'],
+ 3:['CELL = 30 пикселей, поле 10 × 20 клеток, значит 300 × 600 пикселей.','Поле смещено на (30, 40), а панель счёта рисуется с x = 355.','Фигуры заданы матрицами из нулей и единиц, цвета лежат в словаре с теми же ключами.'],
+ 4:['Поворот это две операции: развернуть строки (shape[::-1]) и транспонировать (zip).','OPiece переопределяет rotated(), потому что квадрат не меняется. Это пример полиморфизма.','create_piece(kind) создаёт фигуру по букве или случайную, если буква не указана.'],
+ 5:['Board хранит cells: 20 строк по 10 клеток, в клетке либо None, либо цвет.','is_valid проверяет границы и занятость до того, как фигура сдвинется.','clear_lines оставляет только неполные строки и добавляет пустые сверху.'],
+ 6:['handle_event получает событие pygame и вызывает нужный метод.','Любое движение сначала проверяется через board.is_valid.','Hold работает один раз за фигуру, флаг can_hold сбрасывается в spawn().'],
+ 7:['level растёт каждые 10 линий, скорость падения зависит от level.','Очки за линии умножаются на текущий уровень.','При 100 линиях игра выиграна, поэтому реально скорость доходит до 245 мс на уровне 10.'],
+ 8:['dt это миллисекунды между кадрами, clock.tick(FPS) ограничивает 60 кадрами.','Порядок кадра: события, обновление, очистка, рисование, flip.','fall_timer накапливает dt, поэтому скорость игры не зависит от FPS компьютера.'],
+ 9:['Нажмите Старт и играйте стрелками. Справа в журнале видно, какой файл и метод сработал.','Кнопка +10 линий нужна только в демонстрации, чтобы быстро показать смену уровня.','Esc возвращает листание слайдов стрелками.'],
+ 10:['Эти вопросы чаще всего задают на защите.','Каждый участник готовит ответ про свой класс.','В конце можно честно назвать, что улучшили бы дальше.']
+};
+
+/* ===== drawers ===== */
+const scrim=$('#scrim');let openD=null,cur=0,codeTab=0,codeMode='code';
+function openDrawer(id){
+  closeDrawer(true);openD=$('#'+id);openD.classList.add('open');scrim.classList.add('on');
+  const f=openD.querySelector('button,input');setTimeout(()=>f&&f.focus({preventScroll:true}),50);
+}
+function closeDrawer(keep){if(openD){openD.classList.remove('open');openD=null;}if(!keep)scrim.classList.remove('on');}
+scrim.addEventListener('click',()=>closeDrawer());
+$$('[data-close]').forEach(b=>b.addEventListener('click',()=>closeDrawer()));
+function renderCode(){
+  const tabs=CODE[cur+1]||[];
+  const h0=$('#cTabs0');
+  h0.innerHTML=`<button class="tab" role="tab" aria-selected="${codeMode==='code'}" data-m="code">Код</button><button class="tab" role="tab" aria-selected="${codeMode==='notes'}" data-m="notes">Что сказать</button>`;
+  $$('button',h0).forEach(b=>b.onclick=()=>{codeMode=b.dataset.m;renderCode();});
+  const t=$('#cTabs'),body=$('#cBody');
+  if(codeMode==='notes'){
+    t.hidden=true;
+    body.innerHTML=`<h3 style="margin-bottom:10px">Заметки докладчика, слайд ${cur+1}</h3><ul class="list notes">${(NOTES[cur+1]||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+    return;
+  }
+  t.hidden=false;
+  if(codeTab>=tabs.length)codeTab=0;
+  t.innerHTML=tabs.map((x,i)=>`<button class="tab" role="tab" aria-selected="${i===codeTab}" data-i="${i}">${esc(x.t)}</button>`).join('');
+  $$('button',t).forEach(b=>b.onclick=()=>{codeTab=+b.dataset.i;renderCode();});
+  const c=tabs[codeTab];
+  body.innerHTML=`<p class="muted mono" style="font-size:12px;margin-bottom:8px">${c.f}.py${c.a?`, строки ${c.a}–${c.b}`:''}</p>`+codeBlock(c.f,c.a,c.b);
+}
+function openCode(tabIndex,mode){codeMode=mode||'code';if(tabIndex!=null)codeTab=tabIndex;renderCode();openDrawer('dCode');}
+$('#bCode').onclick=()=>{openD&&openD.id==='dCode'?closeDrawer():openCode()};
+$('#bTone').onclick=()=>{openD&&openD.id==='dTone'?closeDrawer():openDrawer('dTone')};
+$('#bMenu').onclick=()=>{openD&&openD.id==='dMenu'?closeDrawer():openDrawer('dMenu')};
+
+/* tones UI */
+$('#tones').innerHTML=TONES.map(t=>`<button class="tone" data-id="${t.id}" aria-pressed="false"><span class="sw">${t.c.map(c=>`<i style="background:${c}"></i>`).join('')}</span><b>${t.name}</b></button>`).join('');
+$$('.tone').forEach(b=>b.onclick=()=>applyTone(TONES.find(t=>t.id===b.dataset.id)));
+$('#bgOn').onchange=e=>BG.setOn(e.target.checked);
+$('#bgAlpha').oninput=e=>BG.setAlpha(e.target.value/100);
+$('#bgSpeed').oninput=e=>BG.setSpeed(300-e.target.value);
+$('#fsBtn').onclick=()=>{try{(document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()).catch(()=>{})}catch(e){}};
+
+/* ===== navigation ===== */
+const slides=$$('.slide'),N=slides.length;
+$('#menu').innerHTML=slides.map((s,i)=>`<button class="mi" data-i="${i}" style="--mc:${s.style.getPropertyValue('--sc')}"><small>${String(i+1).padStart(2,'0')}</small><span>${esc(s.dataset.title)}</span></button>`).join('');
+$$('.mi').forEach(b=>b.onclick=()=>{go(+b.dataset.i);closeDrawer();});
+const hooks={};
+function go(i,fromHash){
+  i=Math.max(0,Math.min(N-1,i));if(i===cur&&slides[i].classList.contains('active'))return;
+  const old=cur;
+  slides.forEach((s,k)=>{s.classList.toggle('active',k===i);s.classList.toggle('prev',k<i);});
+  if(hooks[old]&&hooks[old].leave)hooks[old].leave();
+  cur=i;
+  slides[i].scrollTop=0;
+  const sc=slides[i].style.getPropertyValue('--sc');
+  document.documentElement.style.setProperty('--sc',sc);
+  $('#mTitle').textContent=slides[i].dataset.title;$('#mNum').textContent=`${i+1} / ${N}`;
+  $('#mBar').style.width=((i+1)/N*100)+'%';
+  $('#prev').disabled=i===0;$('#next').disabled=i===N-1;
+  $$('.mi').forEach((b,k)=>b.setAttribute('aria-current',k===i));
+  if(hooks[i]&&hooks[i].enter)hooks[i].enter();
+  if(openD&&openD.id==='dCode'){codeTab=0;renderCode();}
+  if(!fromHash){try{history.replaceState(null,'','#s'+(i+1))}catch(e){}}
+}
+$('#prev').onclick=()=>go(cur-1);$('#next').onclick=()=>go(cur+1);
+addEventListener('hashchange',()=>{const m=/^#s(\d+)$/.exec(location.hash);if(m)go(+m[1]-1,true);});
+let demoActive=false;
+addEventListener('keydown',e=>{
+  if(e.target.matches('input,textarea,select'))return;
+  if(demoActive&&cur===8)return; // игра перехватывает клавиши
+  if(e.key==='Escape'){closeDrawer();return;}
+  if(e.key==='ArrowRight'||e.key==='PageDown'){e.preventDefault();go(cur+1);}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(cur-1);}
+  else if(e.key==='Home')go(0);else if(e.key==='End')go(N-1);
+});
+let tx=0,ty=0;
+$('#stage').addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+$('#stage').addEventListener('touchend',e=>{
+  if(e.target.closest('input,canvas,.code,.board,.pad'))return;
+  const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
+  if(Math.abs(dx)>70&&Math.abs(dy)<45)go(cur+(dx<0?1:-1));
+},{passive:true});
+
+/* ===== slide 1: team ===== */
+['Эмлсов Ерасыл','Байысхан Ердәулет','Куанышбеков Амир'].forEach((n,i)=>{
+  $('#team').insertAdjacentHTML('beforeend',`<div class="person"><i style="background:var(--c${i*2%7+1})">${n[0]}</i>${n}</div>`);
+});
+
+/* ===== slide 2: files ===== */
+const FILES=[
+ {k:'main',n:'main.py',tag:'M',c:'var(--c1)',ti:0,imp:['pygame','Game из game.py'],has:['WIDTH, HEIGHT = 600, 680 и FPS = 60','функция main(): окно, часы, объект Game','игровой цикл: события → update → draw → flip','pygame.quit() после выхода из цикла']},
+ {k:'game',n:'game.py',tag:'G',c:'var(--c6)',ti:0,imp:['pygame','Board, create_piece из objects','CELL, COLS, ROWS, BOARD_X, BOARD_Y из settings'],has:['цвета WHITE и MUTED для текста','class Game: restart, spawn, move, rotate','ghost_y, hold, lock_piece, hard_drop','handle_event (клавиши), update (падение), draw (рисование)']},
+ {k:'objects',n:'objects.py',tag:'O',c:'var(--c5)',ti:2,imp:['random, pygame','CELL, COLS, ROWS, BOARD_X, BOARD_Y, COLORS, SHAPES из settings'],has:['class Piece и семь подклассов (IPiece … ZPiece)','PIECE_CLASSES и функция create_piece()','class Board: is_valid, place, clear_lines, draw']},
+ {k:'settings',n:'settings.py',tag:'S',c:'var(--c3)',ti:0,imp:['ничего не импортирует'],has:['CELL = 30, COLS = 10, ROWS = 20','BOARD_X = 30, BOARD_Y = 40','COLORS: цвет каждой из 7 фигур','SHAPES: матрица каждой из 7 фигур']}
+];
+let selFile='game';
+function renderFiles(){
+  $('#files').innerHTML=FILES.map(f=>`<button class="file" data-k="${f.k}" aria-pressed="${f.k===selFile}" style="--fc:${f.c}"><span class="tag" style="background:${f.c}">${f.tag}</span><span class="nm">${f.n}</span><span class="ln">${lineCount(SRC[f.k])} строк</span></button>`).join('');
+  $$('.file').forEach(b=>b.onclick=()=>{selFile=b.dataset.k;renderFiles();});
+  const f=FILES.find(x=>x.k===selFile);
+  $('#fileTitle').textContent=f.n;
+  $('#fileList').innerHTML=`<li><span><b>Подключает:</b> ${f.imp.map(esc).join('; ')}</span></li>`+f.has.map(x=>`<li><span>${esc(x)}</span></li>`).join('');
+  // порядок вкладок в CODE[2]: main, settings, objects, game
+  $('#fileCode').onclick=()=>openCode(['main','settings','objects','game'].indexOf(selFile));
+}
+renderFiles();
+
+/* ===== slide 3: settings ===== */
+(function(){
+  let g='';for(let c=1;c<10;c++)g+=`<path d="M${15+c*15} 20v300" stroke="rgba(255,255,255,.1)"/>`;
+  for(let r=1;r<20;r++)g+=`<path d="M15 ${20+r*15}h150" stroke="rgba(255,255,255,.1)"/>`;
+  $('#svgGrid').innerHTML=g;
+  const C=[['CELL','CELL = 30','размер клетки, px'],['COLS','COLS = 10','клеток в ширину'],['ROWS','ROWS = 20','клеток в высоту'],['BOARD','BOARD_X = 30, BOARD_Y = 40','отступ поля']];
+  $('#consts').innerHTML=C.map(c=>`<button class="cbtn" data-k="${c[0]}"><span>${c[1]}</span><span>${c[2]}</span></button>`).join('');
+  const show=k=>{$$('.hl').forEach(h=>h.classList.toggle('on',h.dataset.k===k));$$('.cbtn').forEach(b=>b.classList.toggle('on',b.dataset.k===k));};
+  $$('.cbtn').forEach(b=>{b.onmouseenter=b.onfocus=b.onclick=()=>show(b.dataset.k);});
+  show('CELL');
+  $('#shapes').innerHTML=KINDS.split('').map(k=>`<button class="shp" data-k="${k}" style="--col:${colOf(k)}"><div class="mx" style="grid-template-columns:repeat(${SHAPES[k][0].length},14px)">${SHAPES[k].flat().map(v=>`<i class="${v?'on':''}"></i>`).join('')}</div>${k}</button>`).join('');
+  $$('.shp').forEach(b=>b.onclick=b.onmouseenter=()=>{
+    $$('.shp').forEach(x=>x.classList.toggle('on',x===b));
+    const k=b.dataset.k;$('#shapeNote').innerHTML=`<code>"${k}": ${JSON.stringify(SHAPES[k]).replace(/,/g,', ')}</code> — ${SHAPES[k].length} × ${SHAPES[k][0].length}, ${SHAPES[k].flat().filter(Boolean).length} клетки.`;
+  });
+})();
+
+/* ===== slide 4: piece ===== */
+(function(){
+  let kind='T',shape=cp(SHAPES.T),turns=0;
+  const mx=(sh,col,cls='')=>`<div class="mx ${cls}" style="--col:${col};grid-template-columns:repeat(${sh[0].length},var(--s))">${sh.flat().map(v=>`<i class="${v?'on':''}">${cls?v:''}</i>`).join('')}</div>`;
+  function render(){
+    $('#kindbar').innerHTML=KINDS.split('').map(k=>`<button data-k="${k}" aria-pressed="${k===kind}" style="--col:${colOf(k)}">${k}</button>`).join('');
+    $$('#kindbar button').forEach(b=>b.onclick=()=>{kind=b.dataset.k;shape=cp(SHAPES[kind]);turns=0;render();});
+    const col=colOf(kind),rev=shape.slice().reverse(),res=kind==='O'?cp(shape):rotatedShape(shape);
+    $('#rotSteps').innerHTML=`<div class="st">${mx(shape,col,'num')}<small>shape</small></div><span class="ar">→</span><div class="st">${mx(rev,col,'num')}<small>shape[::-1]</small></div><span class="ar">→</span><div class="st">${mx(res,col,'num')}<small>zip(*…)</small></div>`;
+    $('#rotNote').innerHTML=kind==='O'?'У <b>OPiece</b> метод <code>rotated()</code> переопределён и возвращает копию без изменений, поэтому все три матрицы одинаковы.':'Сначала строки идут в обратном порядке, затем <code>zip</code> берёт столбцы как новые строки. Итог: поворот на 90° по часовой стрелке.';
+    $('#spawnChip').textContent=`start x = 10 // 2 − ${SHAPES[kind][0].length} // 2 = ${5-Math.floor(SHAPES[kind][0].length/2)}`;
+    $('#kids').innerHTML=KINDS.split('').map(k=>`<button class="kid ${k===kind?'on':''}" data-k="${k}" style="--col:${colOf(k)}">${k}Piece${k==='O'?'<em>override</em>':''}</button>`).join('');
+    $$('#kids .kid').forEach(b=>b.onclick=()=>{kind=b.dataset.k;shape=cp(SHAPES[kind]);render();});
+  }
+  $('#rotBtn').onclick=()=>{shape=kind==='O'?cp(shape):rotatedShape(shape);render();};
+  $('#rotReset').onclick=()=>{shape=cp(SHAPES[kind]);render();};
+  render();
+})();
+
+/* ===== JS port of Board / Piece (same logic as objects.py) ===== */
+class JPiece{
+  constructor(kind,cols){this.kind=kind;this.shape=cp(SHAPES[kind]);this.x=Math.floor(cols/2)-Math.floor(this.shape[0].length/2);this.y=0;}
+  rotated(){return this.kind==='O'?cp(this.shape):rotatedShape(this.shape);}
+}
+class JBoard{
+  constructor(cols,rows){this.cols=cols;this.rows=rows;this.cells=Array.from({length:rows},()=>Array(cols).fill(null));}
+  check(p,dx=0,dy=0,shape=null){
+    shape=shape||p.shape;
+    for(let r=0;r<shape.length;r++)for(let c=0;c<shape[r].length;c++){
+      if(!shape[r][c])continue;
+      const x=p.x+c+dx,y=p.y+r+dy;
+      if(x<0)return{ok:false,why:'x < 0, левая стена'};
+      if(x>=this.cols)return{ok:false,why:'x >= COLS, правая стена'};
+      if(y>=this.rows)return{ok:false,why:'y >= ROWS, дно'};
+      if(y>=0&&this.cells[y][x]!==null)return{ok:false,why:'клетка занята'};
+    }
+    return{ok:true,why:'все клетки свободны'};
+  }
+  isValid(p,dx,dy,shape){return this.check(p,dx,dy,shape).ok;}
+  place(p){
+    for(let r=0;r<p.shape.length;r++)for(let c=0;c<p.shape[r].length;c++){
+      if(p.shape[r][c]){const x=p.x+c,y=p.y+r;if(y<0)return false;this.cells[y][x]=p.kind;}
+    }
+    return true;
+  }
+  clearLines(){
+    const rem=this.cells.filter(row=>row.some(c=>c===null));
+    const cleared=this.rows-rem.length;
+    this.cells=[...Array.from({length:cleared},()=>Array(this.cols).fill(null)),...rem];
+    return cleared;
+  }
+}
+const randKind=()=>KINDS[Math.floor(Math.random()*7)];
+
+/* ===== slide 5: board playground ===== */
+(function(){
+  const COLS=10,ROWS=8;let b,p,flashRows=[];
+  const grid=$('#miniBoard');
+  grid.className='board';grid.style.gridTemplateColumns=`repeat(${COLS},var(--s))`;
+  grid.innerHTML=Array(COLS*ROWS).fill('<i></i>').join('');
+  const cells=$$('i',grid);
+  function reset(){
+    b=new JBoard(COLS,ROWS);
+    [[7,[0,1,2,6,7,8,9]],[6,[0,1,8,9]],[5,[0,9]]].forEach(([r,cs])=>cs.forEach((c,i)=>b.cells[r][c]=KINDS[(r+c)%7]));
+    p=new JPiece('T',COLS);say('Новая задача. Поле 10 × 8, фигура T стоит вверху.');draw();
+  }
+  function draw(){
+    cells.forEach((el,i)=>{el.className='';el.style.removeProperty('--col');});
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const k=b.cells[r][c];if(k){const el=cells[r*COLS+c];el.className='f';el.style.setProperty('--col',colOf(k));}}
+    p.shape.forEach((row,r)=>row.forEach((v,c)=>{if(v){const y=p.y+r,x=p.x+c;if(y>=0&&y<ROWS&&x>=0&&x<COLS){const el=cells[y*COLS+x];el.className='p';el.style.setProperty('--col',colOf(p.kind));}}}));
+  }
+  function say(h){$('#bOut').innerHTML=h;}
+  function res(call,r){return `<div>${esc(call)}</div><div style="margin-top:6px">→ <span class="${r.ok?'ok':'no'}">${r.ok?'True':'False'}</span> <span class="muted">(${esc(r.why)})</span></div>`;}
+  function tryMove(dx,dy){
+    const r=b.check(p,dx,dy);say(res(`board.is_valid(piece, dx=${dx}, dy=${dy})`,r));
+    if(r.ok){p.x+=dx;p.y+=dy;}draw();
+  }
+  function rot(){
+    const s=p.rotated(),r=b.check(p,0,0,s);say(res('board.is_valid(piece, shape=piece.rotated())',r)+(r.ok?'':'<div class="muted" style="margin-top:6px">Поворот отклонён, фигура осталась как была.</div>'));
+    if(r.ok)p.shape=s;draw();
+  }
+  function place(){
+    const ok=b.place(p);say(`<div>board.place(piece)</div><div style="margin-top:6px">→ <span class="${ok?'ok':'no'}">${ok?'True':'False'}</span> <span class="muted">(цвет записан в cells[y][x])</span></div>`);
+    p=new JPiece(randKind(),COLS);draw();
+  }
+  function clear(){
+    const full=[];b.cells.forEach((row,r)=>{if(row.every(c=>c!==null))full.push(r);});
+    full.forEach(r=>{for(let c=0;c<COLS;c++)cells[r*COLS+c].classList.add('flash');});
+    const n=b.clearLines();
+    say(`<div>board.clear_lines()</div><div style="margin-top:6px">→ <span class="${n?'ok':'no'}">${n}</span> <span class="muted">${n?'полных строк убрано, сверху добавлено '+n+' пустых':'полных строк нет, поле не изменилось'}</span></div>`);
+    setTimeout(draw,n?420:0);
+  }
+  const ctl=[['←',()=>tryMove(-1,0),'Влево'],['→',()=>tryMove(1,0),'Вправо'],['↓',()=>tryMove(0,1),'Вниз'],['⟳',rot,'Повернуть'],['place()',place,'place'],['clear_lines()',clear,'clear_lines'],['Заново',reset,'Заново']];
+  $('#miniCtl').innerHTML=ctl.map((c,i)=>`<button class="btn sm${i>=4&&i<6?' primary':''}" data-i="${i}" aria-label="${c[2]}">${esc(c[0])}</button>`).join('');
+  $$('#miniCtl button').forEach(bt=>bt.onclick=ctl[+bt.dataset.i][1]);
+  const TABS={
+    is_valid:'<p><code>is_valid(piece, dx, dy, shape)</code> перебирает клетки фигуры. Если клетка выходит за стены или за дно, либо попала в занятую, возвращает <b>False</b>. Строки выше поля (<code>y &lt; 0</code>) не проверяются на занятость, поэтому фигура может появляться у верхнего края.</p>',
+    place:'<p><code>place(piece)</code> записывает цвет фигуры в <code>cells[y][x]</code> для каждой её клетки. Если хоть одна клетка оказалась выше поля (<code>y &lt; 0</code>), возвращает <b>False</b>, и <code>lock_piece()</code> объявляет конец игры.</p>',
+    clear_lines:'<p><code>clear_lines()</code> оставляет строки, где есть хотя бы один <code>None</code>. Разница с <code>ROWS</code> и есть число убранных линий. Столько же пустых строк добавляется <b>сверху</b>, поэтому всё остальное «падает» вниз.</p>'
+  };
+  let tab='is_valid';
+  function renderTabs(){
+    $('#bTabs').innerHTML=Object.keys(TABS).map(k=>`<button class="tab" role="tab" aria-selected="${k===tab}" data-k="${k}">${k}</button>`).join('');
+    $$('#bTabs button').forEach(x=>x.onclick=()=>{tab=x.dataset.k;renderTabs();});
+    $('#bText').innerHTML=TABS[tab];
+  }
+  renderTabs();reset();
+})();
+
+/* ===== slide 6: game ===== */
+(function(){
+  const KEYS=[
+   ['←  →','move(−1, 0) / move(1, 0)','<p><code>move(dx, dy)</code> спрашивает <code>board.is_valid(current, dx, dy)</code>. Если можно, меняет <code>current.x</code> и возвращает <b>True</b>, иначе ничего не делает и возвращает <b>False</b>. Нажатие даёт один шаг, повтор при удержании не включён.</p>'],
+   ['↓','move(0, 1), score += 1','<p>Мягкий спуск. Фигура опускается на клетку, и <b>только если шаг удался</b>, к счёту добавляется 1.</p>'],
+   ['↑','rotate()','<p>Берёт <code>current.rotated()</code> и проверяет новую форму через <code>is_valid(current, shape=rotated)</code>. Если места нет, поворот молча отменяется. Отскока от стены (wall kick) в этой версии нет.</p>'],
+   ['Space','hard_drop()','<p><code>while self.move(0, 1): score += 2</code>. Фигура падает до упора, за каждую клетку +2 очка, затем сразу вызывается <code>lock_piece()</code>.</p>'],
+   ['C','hold()','<p>Один раз на фигуру (флаг <code>can_hold</code>). Если запас пуст, буква текущей фигуры сохраняется, а на поле появляется следующая через <code>spawn()</code>. Если запас занят, фигуры меняются местами: новая создаётся через <code>create_piece(hold_kind)</code> сверху поля. Если ей там нет места, игра окончена.</p>'],
+   ['P','paused = not paused','<p>Пауза включается и выключается, но только пока игра не окончена. Пока <code>paused</code> или <code>game_over</code>, движение игнорируется, а <code>update()</code> ничего не делает.</p>'],
+   ['R','restart()','<p>Работает всегда. Создаёт новое поле, новую фигуру и обнуляет счёт, линии, уровень, таймер и все флаги.</p>'],
+   ['тень','ghost_y()','<p><code>ghost_y()</code> опускает фигуру в уме, пока <code>is_valid(…, dy + 1)</code> истинно, и возвращает строку приземления. В <code>draw()</code> фигура рисуется там контуром (толщина 2).</p>']
+  ];
+  $('#keys').innerHTML=KEYS.map((k,i)=>`<button class="keyrow" data-i="${i}" aria-pressed="${i===0}"><span class="kbd">${k[0]}</span><span>${k[1]}</span></button>`).join('');
+  const sel=i=>{$$('.keyrow').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.i===i));$('#kTitle').textContent=KEYS[i][1];$('#kText').innerHTML=KEYS[i][2];};
+  $$('.keyrow').forEach(b=>b.onclick=()=>sel(+b.dataset.i));sel(0);
+  const A=[
+   ['board','Board(): пустое поле 20 × 10, где в клетках None.'],['current','Текущая фигура, созданная через create_piece().'],['spawn_next','Следующая фигура. Она хранится, но в этой версии на экране не показывается.'],
+   ['score','Очки. Растут от спусков и от собранных линий.'],['lines','Сколько линий собрано всего.'],['level','1 + lines // 10. Определяет скорость и множитель очков.'],
+   ['fall_timer','Накопленные миллисекунды с последнего шага вниз.'],['game_over','True, когда фигура не помещается или не может быть записана.'],['paused','Пауза по клавише P.'],
+   ['won','True, если собрано 100 линий. Тогда рисуется YOU WIN!'],['hold_kind','Буква отложенной фигуры или None.'],['can_hold','Можно ли сейчас нажать C. Сбрасывается в True в spawn().']
+  ];
+  $('#attrs').innerHTML=A.map((a,i)=>`<button data-i="${i}" aria-pressed="${i===0}">${a[0]}</button>`).join('');
+  const sa=i=>{$$('#attrs button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.i===i));$('#attrText').innerHTML=`<code>self.${A[i][0]}</code> — ${esc(A[i][1])}`;};
+  $$('#attrs button').forEach(b=>b.onclick=()=>sa(+b.dataset.i));sa(0);
+})();
+
+/* ===== slide 7: speed ===== */
+(function(){
+  const POINTS=[0,100,300,500,800];
+  const level=l=>Math.floor(l/10)+1, speed=lv=>Math.max(90,650-(lv-1)*45);
+  let lines=0,cleared=1,raf=0,last=0,pos=0,run=false;
+  const H=240,CH=23,ROWSN=10;
+  $('#fall').style.setProperty('--fh',(ROWSN*CH+4)+'px');$('#fallB').style.setProperty('--fc',CH+'px');
+  $('#pts').innerHTML=[1,2,3,4].map(n=>`<button class="btn sm" data-n="${n}">${n} ${n===1?'линия':n<5?'линии':'линий'} · ${POINTS[n]}</button>`).join('');
+  $$('#pts button').forEach(b=>b.onclick=()=>{cleared=+b.dataset.n;render();});
+  const bars=[];for(let lv=1;lv<=14;lv++)bars.push(lv);
+  function render(){
+    const lv=level(lines),sp=speed(lv);
+    $('#linesVal').textContent=lines;$('#lvl').textContent=lv;$('#spd').textContent=sp;$('#cps').textContent=(1000/sp).toFixed(1);
+    $$('#pts button').forEach(b=>b.classList.toggle('on',+b.dataset.n===cleared));
+    $('#ptsOut').innerHTML=`<div>points[${cleared}] × level</div><div style="margin-top:6px">= ${POINTS[cleared]} × ${lv} = <span class="ok">${POINTS[cleared]*lv}</span> очков</div><div class="muted" style="margin-top:6px">level берётся до пересчёта после этих линий</div>`;
+    $('#bars').innerHTML=bars.map(b=>`<div class="${b===lv?'cur ':''}${b>10?'no':''}"><span>L${b}</span><span class="b"><i style="width:${speed(b)/650*100}%"></i></span><span>${speed(b)} мс</span></div>`).join('');
+    const w=$('#winNote');
+    if(lines>=100){w.hidden=false;w.innerHTML='<b class="ok">lines ≥ 100</b>: <code>game_over = True</code>, <code>won = True</code>. Игра выиграна.';}
+    else if(lv>=10){w.hidden=false;w.innerHTML='Последний уровень, до которого можно доиграть: <b>10</b> (245 мс). Нижняя граница 90 мс в коде есть, но до неё игра не доходит, потому что на 100 линиях наступает победа.';}
+    else w.hidden=true;
+  }
+  $('#lines').oninput=e=>{lines=+e.target.value;render();};
+  function loop(t){
+    if(!run)return;raf=requestAnimationFrame(loop);
+    const sp=speed(level(lines));pos+=(t-last)/sp;last=t;
+    if(pos>=ROWSN)pos-=ROWSN;
+    $('#fallB').style.top=(2+Math.floor(pos)*CH)+'px';
+  }
+  hooks[6]={enter(){run=true;last=performance.now();raf=requestAnimationFrame(loop);},leave(){run=false;cancelAnimationFrame(raf);}};
+  render();
+})();
+
+/* ===== slide 8: loop ===== */
+(function(){
+  const STEPS=[
+   {l:[17],n:'tick',t:'<code>dt = clock.tick(FPS)</code>: ждёт до 1/60 секунды и возвращает, сколько миллисекунд прошло с прошлого кадра. На 60 FPS это около 16–17 мс.'},
+   {l:[19],n:'events',t:'<code>pygame.event.get()</code> отдаёт все события, накопившиеся за кадр: нажатия клавиш, закрытие окна.'},
+   {l:[20,21,22,23],n:'handle_event',t:'Закрытие окна гасит флаг <code>running</code>. Всё остальное уходит в <code>game.handle_event(event)</code>, где клавиши превращаются в методы.'},
+   {l:[25],n:'update',t:'<code>game.update(dt)</code> прибавляет <code>dt</code> к <code>fall_timer</code> и роняет фигуру, когда набралось достаточно времени.'},
+   {l:[26],n:'fill',t:'<code>screen.fill((16, 19, 31))</code> закрашивает прошлый кадр тёмным фоном.'},
+   {l:[27],n:'draw',t:'<code>game.draw(screen)</code> рисует поле, тень, фигуру и панель справа: счёт, линии, уровень, hold и подсказки.'},
+   {l:[28],n:'flip',t:'<code>pygame.display.flip()</code> показывает готовый кадр на экране. Дальше цикл начинается заново.'}
+  ];
+  let s=0,timer=0,ft=0;
+  $('#lpFlow').innerHTML=STEPS.map((x,i)=>`<span class="node" data-i="${i}">${x.n}</span>${i<STEPS.length-1?'<span class="muted">→</span>':''}`).join('');
+  function render(){
+    $('#loopCode').innerHTML=codeBlock('main',13,34,STEPS[s].l);
+    $$('.node').forEach(n=>n.classList.toggle('on',+n.dataset.i===s));
+    $('#lpText').innerHTML=`<b style="color:var(--fg)">Шаг ${s+1} из ${STEPS.length}.</b> ${STEPS[s].t}`;
+  }
+  function advance(d){
+    s+=d;
+    if(s>=STEPS.length)s=0;
+    if(s<0)s=STEPS.length-1;
+    if(d>0&&s===3){ft+=1000/60;if(ft>=650)ft=0;}
+    $('#ftTxt').textContent=`${Math.round(ft)} / 650 мс`;$('#ftBar').style.width=(ft/650*100)+'%';
+    render();
+  }
+  $('#lpNext').onclick=()=>advance(1);$('#lpPrev').onclick=()=>advance(-1);
+  function stop(){clearInterval(timer);timer=0;$('#lpPlay').textContent='Автоплей';}
+  $('#lpPlay').onclick=()=>{if(timer){stop();return;}$('#lpPlay').textContent='Пауза';timer=setInterval(()=>advance(1),700);};
+  $$('.node').forEach(n=>n.onclick=()=>{s=+n.dataset.i;render();});
+  hooks[7]={leave:stop};
+  render();
+})();
+
+/* ===== slide 9: live demo (port of game.py) ===== */
+(function(){
+  const CELL=24,COLS=10,ROWS=20,cv=$('#demoCv'),ctx=cv.getContext('2d');
+  const dpr=Math.min(devicePixelRatio||1,2);cv.width=COLS*CELL*dpr;cv.height=ROWS*CELL*dpr;cv.style.width=COLS*CELL+'px';cv.style.height=ROWS*CELL+'px';ctx.setTransform(dpr,0,0,dpr,0,0);
+  const MODS={main:'var(--c1)',game:'var(--c6)',objects:'var(--c5)',settings:'var(--c3)'};
+  $('#mods').innerHTML=Object.keys(MODS).map(m=>`<span class="mod" data-m="${m}" style="--mc:${MODS[m]}">${m}.py</span>`).join('');
+  const logs=[];const timers={};
+  function trace(m,txt){
+    logs.unshift({m,txt});if(logs.length>9)logs.pop();
+    const el=$(`.mod[data-m="${m}"]`);el.classList.add('on');clearTimeout(timers[m]);timers[m]=setTimeout(()=>el.classList.remove('on'),700);
+    $('#dLog').innerHTML=logs.map(l=>`<div><b style="color:${MODS[l.m]}">${l.m}</b><span>${esc(l.txt)}</span></div>`).join('');
+  }
+  class G{
+    constructor(){this.restart();}
+    restart(){
+      this.board=new JBoard(COLS,ROWS);this.current=new JPiece(randKind(),COLS);this.score=0;this.lines=0;this.level=1;this.fallTimer=0;
+      this.gameOver=false;this.paused=false;this.won=false;this.holdKind=null;this.canHold=true;this.spawnNext=new JPiece(randKind(),COLS);this.quiet=0;
+    }
+    spawn(){this.current=this.spawnNext;this.spawnNext=new JPiece(randKind(),COLS);this.canHold=true;trace('game','spawn(): current = spawn_next, can_hold = True');
+      if(!this.board.isValid(this.current)){this.gameOver=true;trace('game','spawn(): места нет → game_over = True');}}
+    move(dx,dy){
+      const r=this.board.check(this.current,dx,dy);
+      if(!this.quiet){trace('game',`move(${dx}, ${dy})`);trace('objects',`Board.is_valid(…) → ${r.ok}${r.ok?'':' ('+r.why+')'}`);}
+      if(r.ok){this.current.x+=dx;this.current.y+=dy;return true;}return false;
+    }
+    rotate(){const s=this.current.rotated();trace('objects',`Piece.rotated() для ${this.current.kind}${this.current.kind==='O'?' (переопределён, форма та же)':''}`);
+      const ok=this.board.isValid(this.current,0,0,s);trace('objects',`Board.is_valid(shape=rotated) → ${ok}`);if(ok)this.current.shape=s;}
+    ghostY(){let dy=0;while(this.board.isValid(this.current,0,dy+1))dy++;return this.current.y+dy;}
+    hold(){
+      if(!this.canHold){trace('game','hold(): уже использован для этой фигуры');return;}
+      const k=this.current.kind;
+      if(this.holdKind===null){this.holdKind=k;trace('game',`hold(): запас пуст, ${k} отложена`);this.spawn();}
+      else{this.current=new JPiece(this.holdKind,COLS);trace('objects',`create_piece("${this.holdKind}"): обмен с запасом`);this.holdKind=k;
+        if(!this.board.isValid(this.current)){this.gameOver=true;}}
+      this.canHold=false;
+    }
+    lock(){
+      trace('game','lock_piece()');
+      if(!this.board.place(this.current)){this.gameOver=true;trace('objects','Board.place() → False, фигура выше поля');return;}
+      trace('objects','Board.place(): цвет записан в cells');
+      const c=this.board.clearLines(),P=[0,100,300,500,800];
+      trace('objects',`Board.clear_lines() → ${c}`);
+      this.score+=P[c]*this.level;this.lines+=c;this.level=Math.floor(this.lines/10)+1;
+      if(c)trace('game',`score += points[${c}] × level, level = ${this.level}`);
+      if(this.lines>=100){this.gameOver=true;this.won=true;trace('game','lines ≥ 100 → won = True');return;}
+      this.spawn();
+    }
+    hardDrop(){this.quiet++;let n=0;while(this.move(0,1)){this.score+=2;n++;}this.quiet--;trace('game',`hard_drop(): ${n} клеток вниз, score += ${2*n}`);this.lock();}
+    key(k){
+      trace('main','pygame.event.get() → KEYDOWN → game.handle_event(event)');
+      if(k==='r'){this.restart();trace('game','restart()');return;}
+      if(k==='p'&&!this.gameOver){this.paused=!this.paused;trace('game',`paused = ${this.paused}`);return;}
+      if(this.gameOver||this.paused)return;
+      if(k==='left')this.move(-1,0);else if(k==='right')this.move(1,0);
+      else if(k==='down'){if(this.move(0,1)){this.score+=1;trace('game','score += 1 (мягкий спуск)');}}
+      else if(k==='up')this.rotate();else if(k==='space')this.hardDrop();else if(k==='c')this.hold();
+    }
+    speed(){return Math.max(90,650-(this.level-1)*45);}
+    update(dt){
+      if(this.gameOver||this.paused)return;
+      this.fallTimer+=dt;
+      if(this.fallTimer>=this.speed()){
+        this.fallTimer=0;this.quiet++;const ok=this.move(0,1);this.quiet--;
+        trace('main',`game.update(dt): fall_timer ≥ ${this.speed()} мс → move(0, 1)`);
+        if(!ok)this.lock();
+      }
+    }
+  }
+  const g=new G();let running=false,last=0,raf=0;
+  const fill=(k,x,y,mode)=>{
+    const col=tone.c[KINDS.indexOf(k)];
+    const px=x*CELL+1,py=y*CELL+1,s=CELL-2;
+    if(mode==='ghost'){ctx.strokeStyle=col;ctx.lineWidth=2;ctx.strokeRect(px+1,py+1,s-2,s-2);return;}
+    ctx.fillStyle=col;ctx.beginPath();ctx.roundRect?ctx.roundRect(px+1,py+1,s-2,s-2,4):ctx.rect(px+1,py+1,s-2,s-2);ctx.fill();
+  };
+  function draw(){
+    ctx.fillStyle='#10131f';ctx.fillRect(0,0,COLS*CELL,ROWS*CELL);
+    ctx.strokeStyle='#303648';ctx.lineWidth=1;
+    for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){ctx.strokeRect(x*CELL+.5,y*CELL+.5,CELL-1,CELL-1);const k=g.board.cells[y][x];if(k)fill(k,x,y);}
+    if(!g.gameOver){
+      const gy=g.ghostY(),p=g.current;
+      p.shape.forEach((row,r)=>row.forEach((v,c)=>{if(v)fill(p.kind,p.x+c,gy+r,'ghost');}));
+      p.shape.forEach((row,r)=>row.forEach((v,c)=>{if(v&&p.y+r>=0)fill(p.kind,p.x+c,p.y+r);}));
+    }
+    if(g.paused||g.gameOver){
+      ctx.fillStyle='rgba(8,10,20,.6)';ctx.fillRect(0,0,COLS*CELL,ROWS*CELL);
+      ctx.fillStyle='#eef1fb';ctx.textAlign='center';ctx.font='700 26px Unbounded, Arial';
+      ctx.fillText(g.paused?'PAUSED':g.won?'YOU WIN!':'GAME OVER',COLS*CELL/2,ROWS*CELL/2);
+      if(g.gameOver){ctx.font='500 14px Manrope, Arial';ctx.fillText('Press R to restart',COLS*CELL/2,ROWS*CELL/2+30);}
+    }
+    $('#dStat').innerHTML=[['Score',g.score],['Lines',g.lines],['Level',g.level],['Hold',g.holdKind||'-']].map(a=>`<div><small>${a[0]}</small><b>${a[1]}</b></div>`).join('');
+  }
+  function frame(t){
+    if(!running)return;raf=requestAnimationFrame(frame);
+    const dt=Math.min(t-last,100);last=t;g.update(dt);draw();
+  }
+  function setActive(v){
+    demoActive=v;$('#veil').hidden=v;
+    if(v&&!running){running=true;last=performance.now();raf=requestAnimationFrame(frame);}
+    if(!v)stopLoop();
+  }
+  function stopLoop(){running=false;cancelAnimationFrame(raf);}
+  $('#startBtn').onclick=()=>{setActive(true);};
+  $('#cvwrap').addEventListener('click',e=>{if(!demoActive)setActive(true);});
+  const MAP={ArrowLeft:'left',ArrowRight:'right',ArrowDown:'down',ArrowUp:'up',' ':'space',c:'c',C:'c',p:'p',P:'p',r:'r',R:'r'};
+  addEventListener('keydown',e=>{
+    if(!demoActive||cur!==8)return;
+    if(e.key==='Escape'){setActive(false);$('#veil').hidden=false;return;}
+    const k=MAP[e.key];if(k){e.preventDefault();g.key(k);draw();}
+  });
+  const PAD=[['←','left'],['↑','up'],['↓','down'],['→','right'],['⤓ Space','space'],['C hold','c'],['P','p'],['R','r']];
+  $('#pad').innerHTML=PAD.map((p,i)=>`<button class="btn sm" data-k="${p[1]}" aria-label="${p[1]}">${p[0]}</button>`).join('')+'<button class="btn sm" id="plus10" style="grid-column:span 4" title="Только для демонстрации">+10 линий (только в демо)</button>';
+  $$('#pad [data-k]').forEach(b=>b.onclick=()=>{if(!running)setActive(true);g.key(b.dataset.k);draw();});
+  $('#plus10').onclick=()=>{if(!running)setActive(true);g.lines+=10;g.level=Math.floor(g.lines/10)+1;trace('game',`демо: lines += 10 → level = ${g.level}, speed = ${g.speed()} мс`);draw();};
+  hooks[8]={enter(){trace('main','демо готово: нажми Старт');draw();},leave(){setActive(false);$('#veil').hidden=false;stopLoop();}};
+  draw();
+})();
+
+/* ===== slide 10: Q&A ===== */
+(function(){
+  const F=[[lineCount(SRC.main)+lineCount(SRC.settings)+lineCount(SRC.objects)+lineCount(SRC.game),'строк кода'],[4,'файла'],[10,'классов'],[7,'видов фигур']];
+  $('#facts').innerHTML=F.map(f=>`<div><b>${f[0]}</b><small>${f[1]}</small></div>`).join('');
+  const Q=[
+   ['Почему код разбит на четыре файла?','Каждый файл отвечает за свою часть: <b>settings</b> хранит константы, <b>objects</b> хранит фигуры и поле, <b>game</b> хранит правила, <b>main</b> запускает окно. Так проще искать ошибки и работать вчетвером.'],
+   ['Где в проекте наследование?','<b>Piece</b> — родитель, а <b>IPiece, OPiece, TPiece, JPiece, LPiece, SPiece, ZPiece</b> — наследники. Они вызывают <code>super().__init__(kind)</code> и получают всё общее.'],
+   ['Что такое переопределение и где оно используется?','<b>OPiece.rotated()</b> заменяет метод родителя: квадрат при повороте не меняется, поэтому возвращается копия формы. Остальные фигуры используют <code>Piece.rotated()</code>.'],
+   ['Как работает поворот фигуры?','<code>zip(*self.shape[::-1])</code>: сначала строки идут в обратном порядке, потом <code>zip</code> превращает столбцы в строки. Получается поворот на 90° по часовой.'],
+   ['Зачем сначала проверять, потом двигать?','<code>move()</code> и <code>rotate()</code> вызывают <code>board.is_valid()</code> до изменения. Если проверка не прошла, координаты и форма остаются прежними, фигура не залезает в стену или чужие клетки.'],
+   ['Как удаляются заполненные линии?','<code>clear_lines()</code> оставляет строки, где есть <code>None</code>, считает, сколько убрано, и добавляет столько же пустых строк сверху.'],
+   ['Как считаются очки, уровень и скорость?','Очки за линии: <code>[0, 100, 300, 500, 800][n] × level</code>. Уровень: <code>lines // 10 + 1</code>. Скорость: <code>max(90, 650 − (level − 1) × 45)</code> мс. Плюс 1 за мягкий спуск и 2 за клетку жёсткого.'],
+   ['Зачем нужны dt и fall_timer?','Падение зависит от прошедшего времени, а не от числа кадров. Если компьютер медленнее, игра идёт с той же скоростью, потому что <code>fall_timer</code> копит реальные миллисекунды.'],
+   ['Как работает hold?','Клавиша C откладывает фигуру или меняет её с отложенной, но один раз за фигуру: флаг <code>can_hold</code> выключается и снова включается в <code>spawn()</code>.'],
+   ['Что бы вы улучшили?','<b>Отскок от стены</b> при повороте, <b>показ следующей фигуры</b> (<code>spawn_next</code> уже хранится, но не рисуется), «мешок» фигур вместо чистой случайности, повтор при удержании клавиши, сохранение рекорда.']
+  ];
+  $('#qa').innerHTML=Q.map(q=>`<details><summary>${q[0]}</summary><div class="ans">${q[1]}</div></details>`).join('');
+})();
+
+/* ===== init ===== */
+try{const id=localStorage.getItem('tetris-tone');const t=TONES.find(x=>x.id===id);applyTone(t||TONES[0]);}catch(e){applyTone(TONES[0]);}
+const m=/^#s(\d+)$/.exec(location.hash);
+go(m?+m[1]-1:0,true);
+})();
+</script>
+
+</body></html>
