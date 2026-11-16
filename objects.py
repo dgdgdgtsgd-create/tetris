@@ -1,5 +1,6 @@
 import random
 import pygame
+from effects import draw_block
 from settings import CELL, COLS, ROWS, BOARD_X, BOARD_Y, COLORS, SHAPES
 
 
@@ -73,6 +74,22 @@ def create_piece(kind=None):
     return PIECE_CLASSES[kind]()
 
 
+class PieceBag:
+    """Мешок из 7 фигур: каждая фигура выпадает по одному разу, потом мешок перемешивается заново."""
+
+    def __init__(self):
+        self.kinds = []
+
+    def refill(self):
+        self.kinds = list(PIECE_CLASSES)
+        random.shuffle(self.kinds)
+
+    def next_piece(self):
+        if not self.kinds:
+            self.refill()
+        return create_piece(self.kinds.pop())
+
+
 class Board:
     def __init__(self):
         self.cells = [[None for _ in range(COLS)] for _ in range(ROWS)]
@@ -114,5 +131,5 @@ class Board:
                 rect = pygame.Rect(BOARD_X + x * CELL, BOARD_Y + y * CELL, CELL, CELL)
                 color = self.cells[y][x]
                 if color is not None:
-                    pygame.draw.rect(screen, color, rect.inflate(-2, -2), border_radius=4)
-                pygame.draw.rect(screen, (48, 54, 72), rect, 1)
+                    draw_block(screen, rect.inflate(-2, -2), color)
+                pygame.draw.rect(screen, (26, 36, 54), rect, 1)
