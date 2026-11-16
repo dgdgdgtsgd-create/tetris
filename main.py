@@ -1,14 +1,15 @@
 import pygame
 from game import Game
 
-WIDTH, HEIGHT = 600, 680
+WIDTH, HEIGHT = 820, 680
 FPS = 60
 
 
 def main():
+    pygame.mixer.pre_init(44100, -16, 2, 512)
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("TETRIS")
+    pygame.display.set_caption("Тетрис • Neon Blocks")
     clock = pygame.time.Clock()
     game = Game()
 
@@ -27,6 +28,7 @@ def main():
         game.draw(screen)
         pygame.display.flip()
 
+    game.save_best()
     pygame.quit()
 
 
