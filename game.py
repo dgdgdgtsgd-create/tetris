@@ -238,7 +238,7 @@ class Game:
                 self.sounds.play("start")
             return
 
-        if event.key == pygame.K_r:
+        if event.key == pygame.K_r or (self.game_over and event.key == pygame.K_RETURN):
             self.check_best()
             self.restart()
             return
@@ -339,25 +339,10 @@ class Game:
         self.board.draw(screen)
         if not self.game_over:
             ghost_y = self.ghost_y()
-            for row_index, row in enumerate(self.current.shape):
-                for col_index, value in enumerate(row):
-                    if value:
-                        ghost = pygame.Rect(
-                            BOARD_X + (self.current.x + col_index) * CELL,
-                            BOARD_Y + (ghost_y + row_index) * CELL,
-                            CELL, CELL
-                        )
-                        pygame.draw.rect(screen, self.current.color,
-                                         ghost.inflate(-2, -2), 2, border_radius=4)
-            for row_index, row in enumerate(self.current.shape):
-                for col_index, value in enumerate(row):
-                    if value:
-                        rect = pygame.Rect(
-                            BOARD_X + (self.current.x + col_index) * CELL,
-                            BOARD_Y + (self.current.y + row_index) * CELL,
-                            CELL, CELL
-                        )
-                        draw_block(screen, rect.inflate(-2, -2), self.current.color)
+            for block in self.current.make_blocks(dy=ghost_y - self.current.y):
+                pygame.draw.rect(screen, self.current.color,
+                                 block.rect.inflate(-2, -2), 2, border_radius=4)
+            self.current.make_blocks().draw(screen)
 
         self.draw_panel(screen, (355, 40, 245, 260))
         self.draw_text(screen, "TETRIS", 373, 48, self.big_font, (98, 233, 235))
@@ -399,47 +384,64 @@ class Game:
         self.draw_text(screen, DIFFICULTIES[self.difficulty_index][0], 355, 650, self.small_font, (98, 233, 235))
         if self.notice_timer > 0:
             self.draw_text(screen, self.notice, BOARD_X + 25, 8, self.font, (60, 220, 230))
-        if self.paused or self.game_over:
+        if self.paused and not self.game_over:
             overlay = pygame.Surface((COLS * CELL, ROWS * CELL), pygame.SRCALPHA)
             overlay.fill((10, 14, 25, 215))
             screen.blit(overlay, (BOARD_X, BOARD_Y))
-            message = "ПОБЕДА!" if self.won else "ИГРА ОКОНЧЕНА" if self.game_over else "ПАУЗА"
-            image = self.big_font.render(message, True, WHITE)
+            image = self.big_font.render("ПАУЗА", True, WHITE)
             screen.blit(image, (BOARD_X + (COLS * CELL - image.get_width()) // 2, 285))
-            self.draw_text(screen, "R — заново" if self.game_over else "P / Esc — продолжить", BOARD_X + 35, 340, self.font)
+            self.draw_text(screen, "P / Esc — продолжить", BOARD_X + 35, 340, self.font)
         if self.game_over:
             self.draw_statistics(screen)
         if self.selecting_difficulty:
-            self.draw_difficulty_menu(screen)
+            self.draw_start_screen(screen)
 
-    def draw_difficulty_menu(self, screen):
-        shade = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-        shade.fill((5, 9, 18, 235))
-        screen.blit(shade, (0, 0))
-        self.draw_panel(screen, (120, 100, 580, 480))
-        self.draw_text(screen, "ВЫБЕРИ СЛОЖНОСТЬ", 155, 125, self.big_font, (98, 233, 235))
+    def draw_centered(self, screen, text, y, font=None, color=WHITE, center_x=410):
+        image = (font or self.font).render(text, True, color)
+        screen.blit(image, (center_x - image.get_width() // 2, y))
+
+    def draw_start_screen(self, screen):
+        """Экран 1: название игры, выбор сложности и список клавиш."""
+        screen.blit(self.background, (0, 0))
+        self.draw_panel(screen, (120, 25, 580, 630))
+        self.draw_centered(screen, "TETRIS", 42, self.big_font, (98, 233, 235))
+        self.draw_centered(screen, "NEON BLOCKS  •  цель: 100 линий", 84, self.small_font, MUTED)
+        self.draw_text(screen, "СЛОЖНОСТЬ", 150, 122, self.small_font, MUTED)
         for index, (name, initial, _, _, description) in enumerate(DIFFICULTIES):
-            rect = pygame.Rect(150, 190 + index * 100, 520, 88)
+            rect = pygame.Rect(150, 147 + index * 60, 520, 52)
             selected = index == self.difficulty_index
             pygame.draw.rect(screen, (31, 60, 76) if selected else (20, 26, 42), rect, border_radius=9)
             if selected:
                 pygame.draw.rect(screen, (98, 233, 235), rect, 2, border_radius=9)
-            self.draw_text(screen, f"{index + 1}   {name}", 169, rect.y + 10,
+            self.draw_text(screen, f"{index + 1}   {name}", 169, rect.y + 5,
                            color=(98, 233, 235) if selected else WHITE)
-            self.draw_text(screen, description, 169, rect.y + 42, self.small_font, MUTED)
-            self.draw_text(screen, f"Старт: {initial / 1000:.2f} сек. на клетку", 169, rect.y + 63, self.small_font, MUTED)
-        self.draw_text(screen, "↑ / ↓ или 1–3 — выбрать   •   Enter — играть", 155, 515, self.font)
-        self.draw_text(screen, "R во время игры — новая партия и выбор сложности", 155, 550, self.small_font, MUTED)
+            self.draw_text(screen, f"{description} • старт {initial / 1000:.2f} с",
+                           169, rect.y + 29, self.small_font, MUTED)
+        self.draw_text(screen, "УПРАВЛЕНИЕ", 150, 340, self.small_font, MUTED)
+        controls = (("← / →", "двигать фигуру"), ("↓", "ускорить падение"),
+                    ("↑", "повернуть"), ("Пробел", "опустить сразу"),
+                    ("C", "резерв"), ("P / Esc", "пауза"),
+                    ("R", "заново"), ("M", "звук вкл. / выкл."))
+        for index, (key, action) in enumerate(controls):
+            x = 150 + index % 2 * 270
+            y = 368 + index // 2 * 28
+            self.draw_text(screen, key, x, y, self.small_font, (98, 233, 235))
+            self.draw_text(screen, action, x + 90, y, self.small_font, MUTED)
+        self.draw_centered(screen, "↑ / ↓ или 1–3 — выбрать сложность", 505, self.small_font, MUTED)
+        self.draw_centered(screen, "Нажми Enter, чтобы начать", 545, self.big_font, WHITE)
+        self.draw_centered(screen, f"Рекорд: {self.best}", 600, self.small_font, MUTED)
 
     def draw_statistics(self, screen):
-        shade = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-        shade.fill((5, 9, 18, 225))
-        screen.blit(shade, (0, 0))
-        self.draw_panel(screen, (140, 38, 540, 607))
-        title = "ПОБЕДА!" if self.won else "ИТОГИ ИГРЫ"
-        self.draw_text(screen, title, 175, 54, self.big_font, (98, 233, 235))
-        self.draw_text(screen, f"Счёт: {self.score}   •   Линий: {self.lines}", 175, 99)
-        self.draw_text(screen, DIFFICULTIES[self.difficulty_index][0], 500, 65, self.small_font, MUTED)
+        """Экран 3: победа или поражение, итоговый счёт и перезапуск."""
+        screen.blit(self.background, (0, 0))
+        self.draw_panel(screen, (140, 25, 540, 630))
+        if self.won:
+            self.draw_centered(screen, "ВЫ ПОБЕДИЛИ!", 42, self.big_font, (90, 220, 120))
+        else:
+            self.draw_centered(screen, "ВЫ ПРОИГРАЛИ", 42, self.big_font, (235, 85, 95))
+        self.draw_centered(screen, f"Итоговый счёт: {self.score}", 92, self.big_font, WHITE)
+        self.draw_centered(screen, f"Линий: {self.lines}   •   Рекорд: {self.best}   •   "
+                                   f"{DIFFICULTIES[self.difficulty_index][0]}", 134, self.small_font, MUTED)
         stats = self.statistics()
         rows = (
             ("Точность размещения", f"{stats['accuracy']:.1f}%"),
@@ -450,11 +452,11 @@ class Game:
             ("Время игры (без пауз)", self.format_time(self.elapsed_ms)),
         )
         for index, (label, value) in enumerate(rows):
-            y = 145 + index * 34
+            y = 170 + index * 32
             self.draw_text(screen, label, 175, y, color=MUTED)
             rendered = self.font.render(value, True, WHITE)
             screen.blit(rendered, (645 - rendered.get_width(), y))
-        self.draw_text(screen, "ВРЕМЯ ПО УРОВНЯМ", 175, 357, self.small_font, (98, 233, 235))
+        self.draw_text(screen, "ВРЕМЯ ПО УРОВНЯМ", 175, 377, self.small_font, (98, 233, 235))
         times = list(self.level_times)
         if not self.won:
             times.append((self.level, self.level_elapsed_ms))
@@ -462,11 +464,8 @@ class Game:
             column, row = divmod(index, 5)
             suffix = " (не завершён)" if not self.won and index == len(times) - 1 else ""
             self.draw_text(screen, f"{level}: {self.format_time(duration)}{suffix}",
-                           175 + column * 240, 385 + row * 24, self.small_font, MUTED)
-        self.draw_text(screen, "Точность: фигуры без новых пустот под блоками.", 175, 516, self.small_font, MUTED)
-        self.draw_text(screen, "Высота: средняя по ходам после удаления линий.", 175, 541, self.small_font, MUTED)
-        self.draw_text(screen, "Комбо: ходы с очисткой линий подряд.", 175, 566, self.small_font, MUTED)
-        self.draw_text(screen, "R — сыграть ещё раз", 175, 603, color=(98, 233, 235))
+                           175 + column * 240, 403 + row * 22, self.small_font, MUTED)
+        self.draw_centered(screen, "R / Enter — играть снова", 585, self.font, (98, 233, 235))
 
     def draw_panel(self, screen, rect):
         shadow = pygame.Rect(rect).move(0, 5)
