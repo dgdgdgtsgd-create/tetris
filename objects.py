@@ -4,6 +4,38 @@ from effects import draw_block
 from settings import CELL, COLS, ROWS, BOARD_X, BOARD_Y, COLORS, SHAPES
 
 
+_IMAGE_CACHE = {}
+
+
+def block_image(color):
+    """Картинка одной клетки (кешируется, чтобы не рисовать её заново для каждого спрайта)."""
+    if color not in _IMAGE_CACHE:
+        image = pygame.Surface((CELL, CELL), pygame.SRCALPHA)
+        draw_block(image, pygame.Rect(1, 1, CELL - 2, CELL - 2), color)
+        _IMAGE_CACHE[color] = image
+    return _IMAGE_CACHE[color]
+
+
+class Block(pygame.sprite.Sprite):
+    """Родительский спрайт: одна клетка поля. rect лежит в экранных координатах."""
+
+    def __init__(self, col, row, color):
+        super().__init__()
+        self.col = col
+        self.row = row
+        self.color = color
+        self.image = block_image(color)
+        self.rect = self.image.get_rect(topleft=(BOARD_X + col * CELL, BOARD_Y + row * CELL))
+
+
+class LockedBlock(Block):
+    """Клетка, которая уже легла в стопку."""
+
+
+class PieceBlock(Block):
+    """Клетка падающей фигуры (и её проекции для проверки столкновений)."""
+
+
 class Piece:
     def __init__(self, kind):
         self.kind = kind
@@ -21,6 +53,16 @@ class Piece:
 
     def rotate(self):
         self.shape = self.rotated()
+
+    def make_blocks(self, dx=0, dy=0, shape=None):
+        """Группа спрайтов-клеток фигуры, сдвинутая на (dx, dy)."""
+        group = pygame.sprite.Group()
+        for row_index, row in enumerate(shape or self.shape):
+            for col_index, value in enumerate(row):
+                if value:
+                    group.add(PieceBlock(self.x + col_index + dx,
+                                         self.y + row_index + dy, self.color))
+        return group
 
 
 class IPiece(Piece):
@@ -93,19 +135,15 @@ class PieceBag:
 class Board:
     def __init__(self):
         self.cells = [[None for _ in range(COLS)] for _ in range(ROWS)]
+        self.blocks = pygame.sprite.Group()  # все лежащие клетки (LockedBlock)
 
     def is_valid(self, piece, dx=0, dy=0, shape=None):
-        shape = shape or piece.shape
-        for row_index, row in enumerate(shape):
-            for col_index, value in enumerate(row):
-                if not value:
-                    continue
-                x = piece.x + col_index + dx
-                y = piece.y + row_index + dy
-                if x < 0 or x >= COLS or y >= ROWS:
-                    return False
-                if y >= 0 and self.cells[y][x] is not None:
-                    return False
+        for block in piece.make_blocks(dx, dy, shape):
+            if block.col < 0 or block.col >= COLS or block.row >= ROWS:
+                return False
+            # Столкновение с лежащими клетками проверяем через spritecollideany
+            if pygame.sprite.spritecollideany(block, self.blocks):
+                return False
         return True
 
     def place(self, piece):
@@ -117,19 +155,28 @@ class Board:
                     if y < 0:
                         return False
                     self.cells[y][x] = piece.color
+                    self.blocks.add(LockedBlock(x, y, piece.color))
         return True
 
     def clear_lines(self):
         remaining = [row for row in self.cells if any(cell is None for cell in row)]
         cleared = ROWS - len(remaining)
         self.cells = [[None for _ in range(COLS)] for _ in range(cleared)] + remaining
+        if cleared:
+            self.rebuild_blocks()
         return cleared
+
+    def rebuild_blocks(self):
+        """Пересоздаёт группу спрайтов по сетке после удаления линий."""
+        self.blocks.empty()
+        for y in range(ROWS):
+            for x in range(COLS):
+                if self.cells[y][x] is not None:
+                    self.blocks.add(LockedBlock(x, y, self.cells[y][x]))
 
     def draw(self, screen):
         for y in range(ROWS):
             for x in range(COLS):
                 rect = pygame.Rect(BOARD_X + x * CELL, BOARD_Y + y * CELL, CELL, CELL)
-                color = self.cells[y][x]
-                if color is not None:
-                    draw_block(screen, rect.inflate(-2, -2), color)
                 pygame.draw.rect(screen, (26, 36, 54), rect, 1)
+        self.blocks.draw(screen)
